@@ -764,8 +764,16 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden && stream) closeScanner(); });
 
     /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
-    // Paste the Firebase web config here. Leave null to run on this device only.
-    const FIREBASE_CONFIG = null;
+    // Firebase web config (public by design; access is governed by database rules). Set to null to run on this device only.
+    const FIREBASE_CONFIG = {
+      apiKey: 'AIzaSyDNDSi6Ep3TDbELk5VHtya1p8jbCDMFW98',
+      authDomain: 'context-canvas-5b0b4.firebaseapp.com',
+      databaseURL: 'https://context-canvas-5b0b4-default-rtdb.firebaseio.com',
+      projectId: 'context-canvas-5b0b4',
+      storageBucket: 'context-canvas-5b0b4.firebasestorage.app',
+      messagingSenderId: '974150159084',
+      appId: '1:974150159084:web:5c25ab182da8dc2bedb3c9',
+    };
     const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
     const ROOM = 'default';
     const clientId = Math.random().toString(36).slice(2, 10);
