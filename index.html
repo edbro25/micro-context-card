@@ -31,6 +31,11 @@
     .topbar > * { pointer-events: auto; }
     .topbar .actions { display: flex; gap: 8px; }
     .brand { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
+    .sync { display: inline-flex; align-items: center; gap: 6px; }
+    .sync i { width: 8px; height: 8px; border-radius: 50%; background: #c4c4bc; }
+    .sync.live i { background: var(--ok); }
+    .sync.scan i { background: var(--accent); animation: blink 1s infinite; }
+    @media (max-width: 440px) { .brand { display: none; } }
     .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px;
       padding: 8px 14px; font-size: 13px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 
@@ -147,7 +152,10 @@
   </div>
 
   <div class="topbar">
-    <span class="pill brand">Context Canvas</span>
+    <div class="actions">
+      <span class="pill brand">Context Canvas</span>
+      <span class="pill sync" id="syncPill" hidden><i></i><span id="syncText">Connecting…</span></span>
+    </div>
     <div class="actions">
       <button class="pill" id="resetBtn" hidden>Reset metrics</button>
       <button class="pill" id="recenter">Fit</button>
@@ -208,7 +216,7 @@
 
     /* ---------------- State & persistence ---------------- */
     const loadJSON = (key) => { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; } };
-    const card = Object.assign({ title: 'Untitled', photo: null, target: null, seen: 0 }, loadJSON(STORE_KEY));
+    const card = Object.assign({ title: 'Untitled', photo: null, photoId: null, target: null, seen: 0 }, loadJSON(STORE_KEY));
     const blankMetrics = () => ({ impressions: 0, views: 0, skips: 0, completed: 0, rewatches: 0, totalDwellMs: 0,
       maxDwellMs: 0, likes: 0, comments: 0, saves: 0, shares: 0, follows: 0, taps: 0, leanIns: 0, engaged: 0, lastComment: '' });
     const metrics = Object.assign(blankMetrics(), loadJSON(METRICS_KEY));
@@ -217,7 +225,10 @@
       try { localStorage.setItem(STORE_KEY, JSON.stringify(card)); }
       catch { try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...card, target: null })); } catch {} }
     }
-    function saveMetrics() { try { localStorage.setItem(METRICS_KEY, JSON.stringify(metrics)); } catch {} }
+    function saveMetrics() {
+      try { localStorage.setItem(METRICS_KEY, JSON.stringify(metrics)); } catch {}
+      pushMetrics();
+    }
 
     /* ---------------- Metric definitions (the branches) ---------------- */
     const rate = (a, b) => (b ? a / b : 0);
@@ -429,12 +440,18 @@
       $('photoHint').hidden = !!card.photo;
       $('scanBtn').disabled = !card.target;
       tree.classList.toggle('empty', !card.target);
-      $('resetBtn').hidden = !card.target;
+      links.style.display = card.target ? '' : 'none';
+      $('resetBtn').hidden = !card.photo;
       if (!card.photo) setStatus('No photo registered');
       else if (card.target) setStatus('Photo registered', 'ready');
+      else if (!registeringLocally) setStatus('Registering on another device…', 'busy');
     }
 
-    $('title').addEventListener('input', () => { card.title = $('title').textContent.trim() || 'Untitled'; save(); });
+    $('title').addEventListener('input', () => {
+      card.title = $('title').textContent.trim() || 'Untitled';
+      save();
+      put('title', { value: card.title, by: clientId });
+    });
     $('title').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
     $('photo').addEventListener('click', () => { if (!moved) $('fileInput').click(); });
     $('fileInput').addEventListener('change', async (e) => {
@@ -442,9 +459,10 @@
       e.target.value = '';
       if (file) await setTriggerPhoto(file);
     });
+    // Resets the whole demo — photo, title and metrics — on every connected device.
     $('resetBtn').onclick = () => {
-      if (!confirm('Reset all metrics to zero?')) return;
-      resetMetrics();
+      if (!confirm('Reset everything (photo, title and metrics) on all devices?')) return;
+      resetEverything();
     };
     function resetMetrics() {
       Object.assign(metrics, blankMetrics());
@@ -455,7 +473,7 @@
     }
 
     /* ---------------- Trigger photo → image target ---------------- */
-    let mindar = null;
+    let mindar = null, registeringLocally = false;
     const loadMindAR = () => (mindar ??= import(MINDAR_URL));
 
     function fileToImage(file, maxSide = 1024) {
@@ -486,9 +504,14 @@
       setStatus('Registering photo…', 'busy');
       const bar = $('progress');
       bar.hidden = false; bar.firstElementChild.style.width = '0%';
+      registeringLocally = true;
       try {
         card.photo = await fileToImage(file);
+        card.photoId = Date.now().toString(36) + clientId;
         card.target = null;
+        put('photo', { data: card.photo, id: card.photoId, by: clientId });
+        put('target', null);
+        resetMetrics();
         renderCard();
         setStatus('Registering photo…', 'busy');
         const { Compiler } = await loadMindAR();
@@ -496,26 +519,30 @@
         const compiler = new Compiler();
         await compiler.compileImageTargets([img], (p) => { bar.firstElementChild.style.width = p.toFixed(0) + '%'; });
         card.target = bufToB64(await compiler.exportData());
-        resetMetrics();
+        save();
+        put('target', { data: card.target, id: card.photoId, by: clientId });
         renderCard();
         if (!userPanned) fit();
       } catch (err) {
         console.error(err);
         setStatus('Could not register — try a more detailed photo', '');
       } finally {
+        registeringLocally = false;
         bar.hidden = true;
       }
     }
 
     /* ---------------- Impression tracking (passive proxies) ---------------- */
     let imp = null, gapTimer = null, lastEndAt = 0, leanStart = null;
-    const liveDwell = () => (imp ? (imp.lostAt ?? Date.now()) - imp.start : 0);
+    // Local impression if this device is scanning, otherwise the other device's live watch time.
+    const liveDwell = () => (imp ? (imp.lostAt ?? Date.now()) - imp.start : remoteLive?.inView ? remoteLive.dwellMs : 0);
 
     function onFound() {
       if (gapTimer) {                       // brief dropout: same impression continues
         clearTimeout(gapTimer); gapTimer = null;
         imp.lostAt = null;
         showFound(true, 'Photo detected');
+        pushLive(true);
         return;
       }
       const now = Date.now();
@@ -532,6 +559,7 @@
       flash.classList.add('on');
       requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove('on')));
       navigator.vibrate?.(40);
+      pushLive(true);
       onTriggerSeen(card, metrics);
     }
 
@@ -541,6 +569,7 @@
       leanStart = null;
       showFound(false, 'Point at the registered photo');
       gapTimer = setTimeout(endImpression, GAP_MS);
+      pushLive(true);
     }
 
     function endImpression() {
@@ -557,6 +586,7 @@
       renderMetrics();
       setRail(false);
       cardEl.classList.remove('seen');
+      pushLive(true);
       onTriggerLost(card, metrics);
     }
 
@@ -585,6 +615,7 @@
       if (!imp.completed && d >= COMPLETE_MS) { imp.completed = true; metrics.completed++; changed = true; }
       if (changed) saveMetrics();
       renderMetrics(changed);
+      pushLive();
     }, 200);
 
     /* ---------------- In-camera actions (active proxies) ---------------- */
@@ -667,6 +698,8 @@
     async function openScanner() {
       document.body.classList.add('scanning');
       $('scanner').hidden = false;
+      pushLive(true);
+      if (sync.on) sync.api.onDisconnect(roomRef('live')).remove();
       setRail(false);
       requestAnimationFrame(fit);
       $('scanTitle').textContent = card.title;
@@ -716,6 +749,7 @@
       if (imp) { imp.lostAt ??= Date.now(); endImpression(); }
       $('scanner').hidden = true;
       document.body.classList.remove('scanning');
+      pushLive(true);
       requestAnimationFrame(fit);
     }
 
@@ -729,8 +763,141 @@
     $('closeScan').onclick = closeScanner;
     document.addEventListener('visibilitychange', () => { if (document.hidden && stream) closeScanner(); });
 
+    /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
+    // Firebase web config (public by design; access is governed by database rules). Set to null to run on this device only.
+    const FIREBASE_CONFIG = {
+      apiKey: 'AIzaSyDNDSi6Ep3TDbELk5VHtya1p8jbCDMFW98',
+      authDomain: 'context-canvas-5b0b4.firebaseapp.com',
+      databaseURL: 'https://context-canvas-5b0b4-default-rtdb.firebaseio.com',
+      projectId: 'context-canvas-5b0b4',
+      storageBucket: 'context-canvas-5b0b4.firebasestorage.app',
+      messagingSenderId: '974150159084',
+      appId: '1:974150159084:web:5c25ab182da8dc2bedb3c9',
+    };
+    const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
+    const ROOM = 'default';
+    const clientId = Math.random().toString(36).slice(2, 10);
+    const sync = { on: false, api: null, db: null, connected: false };
+    let remoteLive = null, lastTarget = null, firstMetrics = true, metricsPushTimer = null, livePushAt = 0;
+
+    function roomRef(path) {
+      return sync.api.ref(sync.db, `demos/${ROOM}${path ? '/' + path : ''}`);
+    }
+    function put(path, value) {
+      if (sync.on) sync.api.set(roomRef(path), value).catch((err) => console.error('[sync]', err));
+    }
+    function pushMetrics() {
+      if (!sync.on) return;
+      clearTimeout(metricsPushTimer);
+      metricsPushTimer = setTimeout(() => put('metrics', { ...metrics, by: clientId }), 120);
+    }
+    function pushLive(force = false) {
+      if (!sync.on) return;
+      const now = Date.now();
+      if (!force && now - livePushAt < 500) return;
+      livePushAt = now;
+      put('live', {
+        scanning: document.body.classList.contains('scanning'),
+        inView: !!imp && !imp.lostAt,
+        dwellMs: imp ? liveDwell() : 0,
+        by: clientId,
+      });
+    }
+
+    function updateSyncPill() {
+      $('syncPill').hidden = !FIREBASE_CONFIG;
+      $('syncPill').classList.toggle('live', sync.connected);
+      $('syncPill').classList.toggle('scan', sync.connected && !!remoteLive?.scanning);
+      $('syncText').textContent = !sync.on ? 'Connecting…'
+        : !sync.connected ? 'Offline'
+        : remoteLive?.inView ? 'Live · photo in view'
+        : remoteLive?.scanning ? 'Live · scanning'
+        : 'Live';
+    }
+
+    // Clear this device only (no writes) — used for both local and remote resets.
+    function wipeLocal() {
+      clearTimeout(gapTimer); gapTimer = null; imp = null;
+      if (!$('scanner').hidden) closeScanner();
+      Object.assign(card, { title: 'Untitled', photo: null, photoId: null, target: null, seen: 0 });
+      Object.assign(metrics, blankMetrics());
+      lastTarget = null;
+      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); } catch {}
+      cardEl.classList.remove('seen');
+      renderCard();
+      renderMetrics(false);
+      fit();
+    }
+    function resetEverything() {
+      wipeLocal();
+      if (sync.on) sync.api.remove(roomRef()).catch((err) => console.error('[sync]', err));
+    }
+
+    function applyTitle(v) {
+      if (v?.by === clientId) return;
+      card.title = v?.value || 'Untitled';
+      save();
+      if (document.activeElement !== $('title')) $('title').textContent = card.title;
+    }
+    function applyPhoto(v) {
+      if (!v) { if (card.photo) wipeLocal(); return; }   // demo was reset
+      if (v.id === card.photoId) return;
+      Object.assign(card, { photo: v.data, photoId: v.id, target: lastTarget?.id === v.id ? lastTarget.data : null });
+      save();
+      renderCard();
+      if (!userPanned) fit();
+    }
+    function applyTarget(v) {
+      lastTarget = v;
+      if (!v || v.id !== card.photoId || card.target === v.data) return;
+      card.target = v.data;
+      save();
+      renderCard();
+      if (!userPanned) fit();
+    }
+    function applyMetrics(v) {
+      if (v?.by === clientId) { firstMetrics = false; return; }
+      const next = Object.assign(blankMetrics(), v || {});
+      delete next.by;
+      Object.assign(metrics, next);
+      card.seen = metrics.impressions;
+      try { localStorage.setItem(METRICS_KEY, JSON.stringify(metrics)); } catch {}
+      renderMetrics(!firstMetrics);
+      firstMetrics = false;
+    }
+    function applyLive(v) {
+      remoteLive = v && v.by !== clientId ? v : null;
+      if (!imp) cardEl.classList.toggle('seen', !!remoteLive?.inView);
+      updateSyncPill();
+      renderMetrics(false);
+    }
+
+    async function startSync() {
+      if (!FIREBASE_CONFIG) return;
+      updateSyncPill();
+      try {
+        const [{ initializeApp }, api] = await Promise.all([
+          import(FIREBASE_SDK + 'firebase-app.js'),
+          import(FIREBASE_SDK + 'firebase-database.js'),
+        ]);
+        sync.api = api;
+        sync.db = api.getDatabase(initializeApp(FIREBASE_CONFIG));
+        sync.on = true;
+        api.onValue(api.ref(sync.db, '.info/connected'), (s) => { sync.connected = !!s.val(); updateSyncPill(); });
+        api.onValue(roomRef('title'), (s) => applyTitle(s.val()));
+        api.onValue(roomRef('target'), (s) => applyTarget(s.val()));
+        api.onValue(roomRef('photo'), (s) => applyPhoto(s.val()));
+        api.onValue(roomRef('metrics'), (s) => applyMetrics(s.val()));
+        api.onValue(roomRef('live'), (s) => applyLive(s.val()));
+        updateSyncPill();
+      } catch (err) {
+        console.error('[sync]', err);
+        $('syncText').textContent = 'Sync failed';
+      }
+    }
+
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit };
+    window.contextCanvas = { card, metrics, sync, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
@@ -738,6 +905,7 @@
     layout();
     fit();
     document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
+    startSync();
   </script>
 </body>
 </html>
