@@ -8,7 +8,7 @@
   <style>
     :root {
       --bg: #f4f4f1; --dot: #d3d3cc; --ink: #1d1d1b; --muted: #74746c;
-      --card: #ffffff; --line: #e2e2dc; --accent: #2f6df6; --ok: #1f9d55;
+      --card: #ffffff; --line: #e2e2dc; --link: #cfcfc7; --accent: #2f6df6; --ok: #1f9d55;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
@@ -17,24 +17,28 @@
     button { font: inherit; color: inherit; border: 0; cursor: pointer; }
 
     /* ---------- Canvas ---------- */
-    #canvas { position: fixed; inset: 0; touch-action: none; cursor: grab;
+    #canvas { position: fixed; inset: 0; touch-action: none; cursor: grab; overflow: hidden; background: var(--bg);
       background-image: radial-gradient(var(--dot) 1.2px, transparent 1.2px); }
     #canvas.dragging { cursor: grabbing; }
     #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+    #links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+    #links path { fill: none; stroke: var(--link); stroke-width: 2; transition: stroke .5s, stroke-width .5s; }
+    #links path.lit { stroke: var(--accent); stroke-width: 3.5; transition: none; }
 
     .topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 5; pointer-events: none;
-      display: flex; justify-content: space-between; align-items: center;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
       padding: calc(12px + env(safe-area-inset-top)) 16px 12px; }
     .topbar > * { pointer-events: auto; }
+    .topbar .actions { display: flex; gap: 8px; }
     .brand { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
     .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px;
       padding: 8px 14px; font-size: 13px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 
-    /* ---------- Context card ---------- */
+    /* ---------- Root context card ---------- */
     .card { position: absolute; width: 260px; transform: translate(-50%, -50%);
       background: var(--card); border: 1px solid var(--line); border-radius: 16px;
       box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.06);
-      overflow: hidden; transition: box-shadow .25s, border-color .25s; }
+      overflow: hidden; transition: box-shadow .25s, border-color .25s; z-index: 1; }
     .card.seen { border-color: var(--ok); box-shadow: 0 0 0 4px rgba(31,157,85,.25), 0 8px 24px rgba(0,0,0,.08); }
     .card-label { display: flex; justify-content: space-between; align-items: center;
       padding: 10px 14px 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
@@ -55,30 +59,78 @@
     @keyframes blink { 50% { opacity: .3; } }
     .btn { background: var(--ink); color: #fff; border-radius: 999px; padding: 8px 16px; font-size: 14px; font-weight: 500; }
     .btn:disabled { opacity: .35; cursor: default; }
-    .btn.ghost { background: transparent; color: var(--muted); padding: 8px 6px; }
+
+    /* ---------- Metric branches ---------- */
+    #tree { transition: opacity .4s; }
+    #tree.empty { opacity: 0; pointer-events: none; }
+    .branch, .metric { position: absolute; border-radius: 12px; }
+    .branch { width: 206px; background: var(--ink); color: #fff; padding: 10px 12px; }
+    .branch b { display: block; font-size: 14px; }
+    .branch span { font-size: 11px; opacity: .7; }
+    .metric { width: 182px; min-height: 80px; background: var(--card); border: 1px solid var(--line); padding: 8px 12px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .metric .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .metric .row { display: flex; align-items: baseline; gap: 6px; margin: 1px 0 2px; min-width: 0; }
+    .metric .value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+    .metric .detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .metric .proxy { font-size: 11px; color: var(--muted); line-height: 1.3; }
+    .metric.pulse { animation: pulse .9s ease-out; }
+    @keyframes pulse {
+      0% { transform: scale(1.06); border-color: var(--accent); box-shadow: 0 0 0 6px rgba(47,109,246,.25); }
+      100% { transform: scale(1); border-color: var(--line); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    }
 
     /* ---------- Viewfinder ---------- */
-    #scanner { position: fixed; inset: 0; z-index: 20; background: #000; }
+    #scanner { position: fixed; inset: 0; z-index: 20; background: #000; overflow: hidden; touch-action: manipulation; }
     #scanner video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
     #flash { position: absolute; inset: 0; background: rgba(31,157,85,.35); opacity: 0; pointer-events: none; transition: opacity .4s; }
     #flash.on { opacity: 1; transition: none; }
+    .guide { position: absolute; left: 50%; top: 50%; height: 50%; aspect-ratio: 1; transform: translate(-50%, -50%);
+      border: 2px solid rgba(255,255,255,.5); border-radius: 24px; transition: border-color .2s; pointer-events: none; }
+    .guide.found { border-color: var(--ok); }
     .scan-top { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center;
-      padding: calc(14px + env(safe-area-inset-top)) 16px 14px; color: #fff; }
-    .scan-top button { background: rgba(0,0,0,.45); color: #fff; border-radius: 999px; padding: 8px 16px; }
-    .scan-status { position: absolute; left: 50%; bottom: calc(36px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+      padding: calc(12px + env(safe-area-inset-top)) 12px 12px 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+    .scan-top button { background: rgba(0,0,0,.45); color: #fff; border-radius: 999px; padding: 8px 16px; text-shadow: none; }
+    .scan-status { position: absolute; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); max-width: calc(100% - 24px);
       display: flex; align-items: center; gap: 10px; white-space: nowrap;
-      background: rgba(0,0,0,.55); color: #fff; padding: 10px 16px 10px 10px; border-radius: 999px; font-size: 15px; }
-    .scan-status img { width: 36px; height: 36px; object-fit: cover; border-radius: 8px; }
+      background: rgba(0,0,0,.55); color: #fff; padding: 6px 14px 6px 6px; border-radius: 999px; font-size: 14px; }
+    .scan-status img { width: 30px; height: 30px; object-fit: cover; border-radius: 8px; }
     .scan-status.found { background: var(--ok); }
-    .guide { position: absolute; left: 50%; top: 50%; width: min(70vw, 70vh); aspect-ratio: 1; transform: translate(-50%, -50%);
-      border: 2px solid rgba(255,255,255,.6); border-radius: 24px; transition: border-color .2s; }
-    .found ~ .guide, .guide.found { border-color: var(--ok); }
+    .rail { position: absolute; right: 10px; top: calc(60px + env(safe-area-inset-top)); bottom: calc(108px + env(safe-area-inset-bottom));
+      display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+    .rail button { width: 42px; height: 42px; border-radius: 50%; background: rgba(0,0,0,.45); font-size: 19px;
+      display: grid; place-items: center; transition: opacity .2s, background .2s, transform .1s; }
+    .rail button:active { transform: scale(.9); }
+    .rail button.active { background: #fff; }
+    .off .rail button, .off .cta { opacity: .4; }
+    .cta { position: absolute; left: 12px; right: 64px; bottom: calc(56px + env(safe-area-inset-bottom));
+      background: #fff; color: var(--ink); border-radius: 12px; padding: 10px 14px; font-weight: 600; font-size: 14px;
+      display: flex; justify-content: space-between; }
+    .cta.active { background: var(--accent); color: #fff; }
+    #commentBar { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+      display: flex; gap: 8px; background: #fff; border-radius: 999px; padding: 4px 4px 4px 14px; z-index: 2; }
+    #commentBar input { flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 16px; background: transparent; }
+    #commentBar button { background: var(--ink); color: #fff; border-radius: 999px; padding: 8px 14px; }
+    .heart { position: absolute; font-size: 72px; transform: translate(-50%, -50%); pointer-events: none; animation: pop .8s ease-out forwards; }
+    @keyframes pop { 0% { transform: translate(-50%,-50%) scale(.4); opacity: 0; } 25% { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
+      100% { transform: translate(-50%,-90%) scale(1); opacity: 0; } }
+
+    /* While scanning: camera and live canvas share the screen */
+    body.scanning .topbar { display: none; }
+    body.scanning #scanner { inset: 0 0 42% 0; }
+    body.scanning #canvas { inset: 58% 0 0 0; border-top: 1px solid var(--line); }
+    @media (min-aspect-ratio: 1/1) {
+      body.scanning #scanner { inset: 0 50% 0 0; }
+      body.scanning #canvas { inset: 0 0 0 50%; border-top: 0; border-left: 1px solid var(--line); }
+    }
   </style>
 </head>
 <body>
   <!-- Full-page pan / zoom canvas -->
   <div id="canvas">
     <div id="world">
+      <svg id="links" width="1" height="1"></svg>
+      <div id="tree" class="empty"></div>
       <div class="card" id="card" style="left:0;top:0">
         <div class="card-label"><span>Context card · Step 1</span><span id="seenCount"></span></div>
         <div class="card-title" id="title" contenteditable="true" spellcheck="false">Untitled</div>
@@ -96,13 +148,16 @@
 
   <div class="topbar">
     <span class="pill brand">Context Canvas</span>
-    <button class="pill" id="recenter">Recenter</button>
+    <div class="actions">
+      <button class="pill" id="resetBtn" hidden>Reset metrics</button>
+      <button class="pill" id="recenter">Fit</button>
+    </div>
   </div>
 
   <input type="file" id="fileInput" accept="image/*" hidden>
 
   <!-- Camera viewfinder -->
-  <div id="scanner" hidden>
+  <div id="scanner" class="off" hidden>
     <video id="video" autoplay playsinline muted></video>
     <div id="flash"></div>
     <div class="guide" id="guide"></div>
@@ -110,41 +165,172 @@
       <span id="scanTitle"></span>
       <button id="closeScan">Done</button>
     </div>
+    <div class="rail" id="rail">
+      <button data-act="like" aria-label="Like">❤️</button>
+      <button data-act="comment" aria-label="Comment">💬</button>
+      <button data-act="save" aria-label="Save">🔖</button>
+      <button data-act="share" aria-label="Share">📤</button>
+      <button data-act="follow" aria-label="Follow">➕</button>
+    </div>
+    <button class="cta" data-act="tap" id="cta"><span>Learn more</span><span>›</span></button>
     <div class="scan-status" id="scanStatus"><img id="scanThumb" alt=""><span id="scanText">Starting camera…</span></div>
+    <form id="commentBar" hidden>
+      <input id="commentInput" placeholder="Add a comment…" autocomplete="off" enterkeyhint="send">
+      <button type="submit">Post</button>
+    </form>
   </div>
 
   <script type="module">
     const MINDAR_URL = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
     const STORE_KEY = 'contextCanvas.card.v1';
+    const METRICS_KEY = 'contextCanvas.metrics.v1';
     const $ = (id) => document.getElementById(id);
 
+    // Proxy thresholds
+    const HOOK_MS = 1000;       // held in view this long = "stopped scrolling"
+    const COMPLETE_MS = 6000;   // held in view this long = "watched to the end"
+    const REWATCH_MS = 8000;    // back in view within this window = rewatch
+    const GAP_MS = 700;         // brief tracking dropouts shorter than this don't end the impression
+    const LEAN_RATIO = 0.75;    // camera moved ≥25% closer than at first sight = lean-in
+    const LEAN_MS = 400;
+
     /* ================================================================
-       ACTION HOOKS — fill these in with what should happen.
-       onTriggerSeen fires once each time the photo comes into view
-       (it will not fire again until the photo leaves the view).
+       ACTION HOOKS — step 2 goes here.
+       onTriggerSeen fires once per impression (photo comes into view);
+       onTriggerLost fires when that impression ends.
        ================================================================ */
-    function onTriggerSeen(card) {
-      // TODO: the action goes here.
-      console.log('[context-card] trigger seen', card.title, 'count:', card.seen);
+    function onTriggerSeen(card, metrics) {
+      console.log('[context-card] impression', metrics.impressions);
     }
-    function onTriggerLost(card) {
-      console.log('[context-card] trigger lost', card.title);
+    function onTriggerLost(card, metrics) {
+      console.log('[context-card] impression ended');
     }
 
     /* ---------------- State & persistence ---------------- */
-    const card = Object.assign({ title: 'Untitled', photo: null, target: null, seen: 0 }, load());
+    const loadJSON = (key) => { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; } };
+    const card = Object.assign({ title: 'Untitled', photo: null, target: null, seen: 0 }, loadJSON(STORE_KEY));
+    const blankMetrics = () => ({ impressions: 0, views: 0, skips: 0, completed: 0, rewatches: 0, totalDwellMs: 0,
+      maxDwellMs: 0, likes: 0, comments: 0, saves: 0, shares: 0, follows: 0, taps: 0, leanIns: 0, engaged: 0, lastComment: '' });
+    const metrics = Object.assign(blankMetrics(), loadJSON(METRICS_KEY));
 
-    function load() {
-      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; }
-    }
     function save() {
       try { localStorage.setItem(STORE_KEY, JSON.stringify(card)); }
       catch { try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...card, target: null })); } catch {} }
     }
+    function saveMetrics() { try { localStorage.setItem(METRICS_KEY, JSON.stringify(metrics)); } catch {} }
+
+    /* ---------------- Metric definitions (the branches) ---------------- */
+    const rate = (a, b) => (b ? a / b : 0);
+    const pct = (x) => Math.round(x * 100) + '%';
+    const sec = (ms) => (ms / 1000).toFixed(1) + 's';
+    const ofImp = (n) => `${n} / ${metrics.impressions}`;
+
+    const BRANCHES = [
+      { id: 'attention', title: 'Attention', sub: 'Does it stop the scroll?', leaves: [
+        { id: 'impressions', label: 'Impressions', value: (m) => String(m.impressions), detail: (m) => `${m.rewatches} rewatch`, proxy: 'Photo enters the frame' },
+        { id: 'hook', label: 'Hook rate', value: (m) => pct(rate(m.views, m.impressions)), detail: (m) => ofImp(m.views), proxy: 'Held in view ≥ 1s' },
+        { id: 'skip', label: 'Quick-skip rate', value: (m) => pct(rate(m.skips, m.impressions)), detail: (m) => ofImp(m.skips), proxy: 'Left view in under 1s' },
+      ] },
+      { id: 'retention', title: 'Retention', sub: 'How long do they watch?', leaves: [
+        { id: 'watch', label: 'Avg watch time', value: (m) => sec(rate(m.totalDwellMs + liveDwell(), m.impressions)), detail: (m) => `max ${sec(Math.max(m.maxDwellMs, liveDwell()))}`, proxy: 'Time the photo stays tracked' },
+        { id: 'completion', label: 'Completion rate', value: (m) => pct(rate(m.completed, m.impressions)), detail: (m) => ofImp(m.completed), proxy: 'Held in view ≥ 6s' },
+        { id: 'rewatch', label: 'Rewatch rate', value: (m) => pct(rate(m.rewatches, m.impressions)), detail: (m) => ofImp(m.rewatches), proxy: 'Back in view within 8s' },
+      ] },
+      { id: 'engagement', title: 'Engagement', sub: 'Do they act on it?', leaves: [
+        { id: 'likes', label: 'Likes', value: (m) => String(m.likes), proxy: 'Double-tap or ❤️' },
+        { id: 'comments', label: 'Comments', value: (m) => String(m.comments), detail: (m) => (m.lastComment ? `“${m.lastComment}”` : ''), proxy: '💬 then Post' },
+        { id: 'saves', label: 'Saves', value: (m) => String(m.saves), proxy: '🔖 — high-intent signal' },
+        { id: 'shares', label: 'Shares', value: (m) => String(m.shares), proxy: '📤 — strongest reach signal' },
+        { id: 'engRate', label: 'Engagement rate', value: (m) => pct(rate(m.engaged, m.impressions)), detail: (m) => `${m.likes + m.comments + m.saves + m.shares} actions`, proxy: 'Impressions with any ❤️ 💬 🔖 📤' },
+      ] },
+      { id: 'conversion', title: 'Conversion', sub: 'What advertisers pay for', leaves: [
+        { id: 'follows', label: 'Follow rate', value: (m) => pct(rate(m.follows, m.impressions)), detail: (m) => ofImp(m.follows), proxy: '➕ Follow' },
+        { id: 'ctr', label: 'Tap-through rate', value: (m) => pct(rate(m.taps, m.impressions)), detail: (m) => ofImp(m.taps), proxy: '“Learn more” taps' },
+        { id: 'leanIn', label: 'Lean-in rate', value: (m) => pct(rate(m.leanIns, m.impressions)), detail: (m) => ofImp(m.leanIns), proxy: 'Camera moved ≥ 25% closer' },
+      ] },
+    ];
+    const leafById = {};
+    BRANCHES.forEach((b) => b.leaves.forEach((l) => { l.branch = b.id; leafById[l.id] = l; }));
+
+    /* ---------------- Tree: build, lay out, render ---------------- */
+    const tree = $('tree'), links = $('links'), cardEl = $('card');
+    const COL_GAP = 230, BRANCH_Y = 250, SPINE_INSET = 12, LEAF_INDENT = 24, LEAF_GAP = 10;
+    let bounds = { tree: null, root: null };
+
+    function buildTree() {
+      for (const b of BRANCHES) {
+        b.el = Object.assign(document.createElement('div'), { className: 'branch' });
+        b.el.innerHTML = `<b>${b.title}</b><span>${b.sub}</span>`;
+        tree.append(b.el);
+        for (const l of b.leaves) {
+          l.el = Object.assign(document.createElement('div'), { className: 'metric' });
+          l.el.innerHTML = `<div class="label">${l.label}</div><div class="row"><span class="value"></span><span class="detail"></span></div><div class="proxy">${l.proxy}</div>`;
+          l.valueEl = l.el.querySelector('.value');
+          l.detailEl = l.el.querySelector('.detail');
+          tree.append(l.el);
+        }
+      }
+    }
+
+    function layout() {
+      const place = (el, x, y) => { el.style.left = x + 'px'; el.style.top = y + 'px'; };
+      const rootBottom = cardEl.offsetHeight / 2;
+      const midY = (rootBottom + BRANCH_Y) / 2;
+      const paths = [];
+      let maxY = BRANCH_Y;
+      BRANCHES.forEach((b, i) => {
+        const cx = (i - (BRANCHES.length - 1) / 2) * COL_GAP;
+        const left = cx - 103;
+        place(b.el, left, BRANCH_Y);
+        const branchBottom = BRANCH_Y + b.el.offsetHeight;
+        paths.push(`<path id="link-${b.id}" d="M0 ${rootBottom} V${midY} H${cx} V${BRANCH_Y}"/>`);
+        const spineX = left + SPINE_INSET;
+        let y = branchBottom + LEAF_GAP;
+        for (const l of b.leaves) {
+          place(l.el, left + LEAF_INDENT, y);
+          const mid = y + l.el.offsetHeight / 2;
+          paths.push(`<path id="link-${l.id}" d="M${spineX} ${branchBottom} V${mid} H${left + LEAF_INDENT}"/>`);
+          y += l.el.offsetHeight + LEAF_GAP;
+        }
+        maxY = Math.max(maxY, y);
+      });
+      links.innerHTML = paths.join('');
+      const halfW = ((BRANCHES.length - 1) / 2) * COL_GAP + 103;
+      const top = -cardEl.offsetHeight / 2;
+      bounds.tree = { x: -halfW, y: top, w: halfW * 2, h: maxY - top };
+      bounds.root = { x: -cardEl.offsetWidth / 2, y: top, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
+    }
+
+    const litTimers = {};
+    function light(id) {
+      const p = links.querySelector('#link-' + id);
+      if (!p) return;
+      p.classList.add('lit');
+      clearTimeout(litTimers[id]);
+      litTimers[id] = setTimeout(() => p.classList.remove('lit'), 250);
+    }
+
+    function renderMetrics(pulse = true) {
+      for (const l of Object.values(leafById)) {
+        const v = l.value(metrics), d = l.detail ? l.detail(metrics) : '';
+        if (l.valueEl.textContent === v && l.detailEl.textContent === d) continue;
+        l.valueEl.textContent = v;
+        l.detailEl.textContent = d;
+        if (pulse && l.rendered) {
+          l.el.classList.remove('pulse');
+          void l.el.offsetWidth;
+          l.el.classList.add('pulse');
+          light(l.branch);
+          light(l.id);
+        }
+        l.rendered = true;
+      }
+      $('seenCount').textContent = metrics.impressions ? `Seen ${metrics.impressions}×` : '';
+    }
 
     /* ---------------- Canvas pan & zoom ---------------- */
     const canvasEl = $('canvas'), world = $('world');
-    const view = { x: innerWidth / 2, y: innerHeight / 2, k: 1 };
+    const view = { x: 0, y: 0, k: 1 };
     const pointers = new Map();
     let pinch = null, moved = false, userPanned = false;
 
@@ -154,17 +340,33 @@
       canvasEl.style.backgroundSize = `${s}px ${s}px`;
       canvasEl.style.backgroundPosition = `${view.x % s}px ${view.y % s}px`;
     }
+    function localPoint(clientX, clientY) {
+      const r = canvasEl.getBoundingClientRect();
+      return [clientX - r.left, clientY - r.top];
+    }
     function zoomAt(cx, cy, k) {
-      k = Math.min(3, Math.max(0.3, k));
+      k = Math.min(3, Math.max(0.2, k));
       view.x = cx - (cx - view.x) * (k / view.k);
       view.y = cy - (cy - view.y) * (k / view.k);
       view.k = k;
       applyView();
     }
-    function recenter() { userPanned = false; view.x = innerWidth / 2; view.y = innerHeight / 2; view.k = 1; applyView(); }
+    // Fit the whole tree once a photo is registered; otherwise just the card.
+    function fit() {
+      userPanned = false;
+      const b = (card.target ? bounds.tree : bounds.root) || { x: -130, y: -150, w: 260, h: 300 };
+      const scanning = document.body.classList.contains('scanning');
+      const top = scanning ? 0 : 56;
+      const cw = canvasEl.clientWidth, ch = canvasEl.clientHeight - top, pad = 32;
+      const k = Math.max(0.2, Math.min(1, (cw - pad) / b.w, (ch - pad) / b.h));
+      view.k = k;
+      view.x = cw / 2 - (b.x + b.w / 2) * k;
+      view.y = top + ch / 2 - (b.y + b.h / 2) * k;
+      applyView();
+    }
 
     canvasEl.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('button, [contenteditable]')) return;
+      if (e.target.closest('button, input, [contenteditable]')) return;
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       moved = false;
       if (pointers.size === 2) {
@@ -187,7 +389,7 @@
       if (pointers.size === 1) { view.x += dx; view.y += dy; applyView(); }
       else if (pointers.size === 2 && pinch) {
         const [a, b] = [...pointers.values()];
-        zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d);
+        zoomAt(...localPoint((a.x + b.x) / 2, (a.y + b.y) / 2), pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d);
       }
     });
     const endPointer = (e) => {
@@ -200,13 +402,13 @@
     canvasEl.addEventListener('wheel', (e) => {
       e.preventDefault();
       userPanned = true;
-      if (e.ctrlKey || e.metaKey) zoomAt(e.clientX, e.clientY, view.k * Math.exp(-e.deltaY * 0.01));
+      if (e.ctrlKey || e.metaKey) zoomAt(...localPoint(e.clientX, e.clientY), view.k * Math.exp(-e.deltaY * 0.01));
       else { view.x -= e.deltaX; view.y -= e.deltaY; applyView(); }
     }, { passive: false });
     ['gesturestart', 'gesturechange'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault()));
-    $('recenter').onclick = recenter;
-    // Chrome's viewport often settles after load; keep the card centered until the user moves the canvas.
-    addEventListener('resize', () => (userPanned ? applyView() : recenter()));
+    $('recenter').onclick = fit;
+    // Chrome's viewport often settles after load; keep things fitted until the user moves the canvas.
+    addEventListener('resize', () => (userPanned ? applyView() : fit()));
 
     /* ---------------- Card UI ---------------- */
     function setStatus(text, state = '') {
@@ -215,7 +417,6 @@
     }
     function renderCard() {
       $('title').textContent = card.title;
-      $('seenCount').textContent = card.seen ? `Seen ${card.seen}×` : '';
       const photoEl = $('photo');
       photoEl.querySelector('img')?.remove();
       if (card.photo) {
@@ -227,6 +428,8 @@
       photoEl.classList.toggle('has-img', !!card.photo);
       $('photoHint').hidden = !!card.photo;
       $('scanBtn').disabled = !card.target;
+      tree.classList.toggle('empty', !card.target);
+      $('resetBtn').hidden = !card.target;
       if (!card.photo) setStatus('No photo registered');
       else if (card.target) setStatus('Photo registered', 'ready');
     }
@@ -239,6 +442,17 @@
       e.target.value = '';
       if (file) await setTriggerPhoto(file);
     });
+    $('resetBtn').onclick = () => {
+      if (!confirm('Reset all metrics to zero?')) return;
+      resetMetrics();
+    };
+    function resetMetrics() {
+      Object.assign(metrics, blankMetrics());
+      card.seen = 0;
+      save();
+      saveMetrics();
+      renderMetrics(false);
+    }
 
     /* ---------------- Trigger photo → image target ---------------- */
     let mindar = null;
@@ -282,9 +496,9 @@
         const compiler = new Compiler();
         await compiler.compileImageTargets([img], (p) => { bar.firstElementChild.style.width = p.toFixed(0) + '%'; });
         card.target = bufToB64(await compiler.exportData());
-        card.seen = 0;
-        save();
+        resetMetrics();
         renderCard();
+        if (!userPanned) fit();
       } catch (err) {
         console.error(err);
         setStatus('Could not register — try a more detailed photo', '');
@@ -293,12 +507,168 @@
       }
     }
 
+    /* ---------------- Impression tracking (passive proxies) ---------------- */
+    let imp = null, gapTimer = null, lastEndAt = 0, leanStart = null;
+    const liveDwell = () => (imp ? (imp.lostAt ?? Date.now()) - imp.start : 0);
+
+    function onFound() {
+      if (gapTimer) {                       // brief dropout: same impression continues
+        clearTimeout(gapTimer); gapTimer = null;
+        imp.lostAt = null;
+        showFound(true, 'Photo detected');
+        return;
+      }
+      const now = Date.now();
+      imp = { start: now, lostAt: null, baseZ: null, viewed: false, completed: false, leaned: false, actions: {} };
+      metrics.impressions++;
+      if (lastEndAt && now - lastEndAt <= REWATCH_MS) metrics.rewatches++;
+      card.seen = metrics.impressions;
+      save(); saveMetrics();
+      renderMetrics();
+      setRail(true);
+      showFound(true, 'Photo detected');
+      cardEl.classList.add('seen');
+      const flash = $('flash');
+      flash.classList.add('on');
+      requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove('on')));
+      navigator.vibrate?.(40);
+      onTriggerSeen(card, metrics);
+    }
+
+    function onLost() {
+      if (!imp) return;
+      imp.lostAt = Date.now();
+      leanStart = null;
+      showFound(false, 'Point at the registered photo');
+      gapTimer = setTimeout(endImpression, GAP_MS);
+    }
+
+    function endImpression() {
+      clearTimeout(gapTimer); gapTimer = null;
+      if (!imp) return;
+      const end = imp.lostAt ?? Date.now();
+      const dwell = end - imp.start;
+      if (dwell < HOOK_MS) metrics.skips++;
+      metrics.totalDwellMs += dwell;
+      metrics.maxDwellMs = Math.max(metrics.maxDwellMs, dwell);
+      lastEndAt = end;
+      imp = null;
+      saveMetrics();
+      renderMetrics();
+      setRail(false);
+      cardEl.classList.remove('seen');
+      onTriggerLost(card, metrics);
+    }
+
+    function onFrame(m) {
+      if (!imp || !m) return;
+      const z = Math.abs(m[14]);
+      if (!z) return;
+      if (imp.baseZ == null) { imp.baseZ = z; return; }
+      if (z < imp.baseZ * LEAN_RATIO) {
+        leanStart ??= Date.now();
+        if (!imp.leaned && Date.now() - leanStart >= LEAN_MS) {
+          imp.leaned = true;
+          metrics.leanIns++;
+          saveMetrics();
+          renderMetrics();
+        }
+      } else leanStart = null;
+    }
+
+    // Live ticker: hook/completion thresholds and watch time update while the photo is in view.
+    setInterval(() => {
+      if (!imp) return;
+      const d = liveDwell();
+      let changed = false;
+      if (!imp.viewed && d >= HOOK_MS) { imp.viewed = true; metrics.views++; changed = true; }
+      if (!imp.completed && d >= COMPLETE_MS) { imp.completed = true; metrics.completed++; changed = true; }
+      if (changed) saveMetrics();
+      renderMetrics(changed);
+    }, 200);
+
+    /* ---------------- In-camera actions (active proxies) ---------------- */
+    const ACTION_KEYS = { like: 'likes', save: 'saves', share: 'shares', follow: 'follows', tap: 'taps' };
+    const ENGAGEMENT_ACTIONS = new Set(['like', 'comment', 'save', 'share']);
+    function markEngaged(forImp, type) {
+      if (!forImp || forImp.engaged || !ENGAGEMENT_ACTIONS.has(type)) return;
+      forImp.engaged = true;
+      metrics.engaged++;
+    }
+    const actionButtons = () => [...document.querySelectorAll('#scanner [data-act]')];
+
+    function setRail(on) {
+      $('scanner').classList.toggle('off', !on);
+      if (on) actionButtons().forEach((b) => b.classList.remove('active'));
+      if (!on) $('commentBar').hidden = true;
+    }
+
+    let nudgeTimer = null;
+    function nudge() {
+      $('scanText').textContent = 'Point at the photo first';
+      clearTimeout(nudgeTimer);
+      nudgeTimer = setTimeout(() => { if (!imp) $('scanText').textContent = 'Point at the registered photo'; }, 1200);
+    }
+
+    function act(type) {
+      if (!imp) return nudge();
+      if (type === 'comment') {
+        $('commentBar').hidden = false;
+        $('commentInput').focus();
+        return;
+      }
+      if (imp.actions[type]) return;      // one of each per impression, like the real apps
+      imp.actions[type] = true;
+      actionButtons().filter((b) => b.dataset.act === type).forEach((b) => b.classList.add('active'));
+      metrics[ACTION_KEYS[type]]++;
+      markEngaged(imp, type);
+      saveMetrics();
+      renderMetrics();
+    }
+
+    actionButtons().forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); act(b.dataset.act); }));
+
+    $('commentBar').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = $('commentInput').value.trim();
+      $('commentInput').value = '';
+      $('commentBar').hidden = true;
+      $('commentInput').blur();
+      if (!text) return;
+      metrics.comments++;
+      metrics.lastComment = text.slice(0, 60);
+      markEngaged(imp, 'comment');
+      saveMetrics();
+      renderMetrics();
+    });
+
+    // Double-tap the viewfinder to like (with a heart burst).
+    let lastTap = 0;
+    $('scanner').addEventListener('pointerup', (e) => {
+      if (e.target.closest('button, input, form')) return;
+      const now = Date.now();
+      if (now - lastTap < 320) {
+        lastTap = 0;
+        if (!imp) return nudge();
+        const r = $('scanner').getBoundingClientRect();
+        const heart = Object.assign(document.createElement('div'), { className: 'heart', textContent: '❤️' });
+        heart.style.left = e.clientX - r.left + 'px';
+        heart.style.top = e.clientY - r.top + 'px';
+        $('scanner').append(heart);
+        setTimeout(() => heart.remove(), 800);
+        act('like');
+      } else lastTap = now;
+    });
+
     /* ---------------- Scanner ---------------- */
     const video = $('video');
     let stream = null, controller = null, visible = false;
 
     async function openScanner() {
+      document.body.classList.add('scanning');
       $('scanner').hidden = false;
+      setRail(false);
+      requestAnimationFrame(fit);
       $('scanTitle').textContent = card.title;
       $('scanThumb').src = card.photo;
       showFound(false, 'Starting camera…');
@@ -320,8 +690,10 @@
           maxTrack: 1,
           onUpdate: ({ type, worldMatrix }) => {
             if (type !== 'updateMatrix') return;
-            if (worldMatrix && !visible) { visible = true; triggerSeen(); }
-            else if (!worldMatrix && visible) { visible = false; triggerLost(); }
+            if (worldMatrix) {
+              if (!visible) { visible = true; onFound(); }
+              onFrame(worldMatrix);
+            } else if (visible) { visible = false; onLost(); }
           },
         });
         controller.addImageTargetsFromBuffer(b64ToBuf(card.target));
@@ -340,8 +712,11 @@
       stream?.getTracks().forEach((t) => t.stop());
       stream = null;
       video.srcObject = null;
-      if (visible) { visible = false; triggerLost(); }
+      visible = false;
+      if (imp) { imp.lostAt ??= Date.now(); endImpression(); }
       $('scanner').hidden = true;
+      document.body.classList.remove('scanning');
+      requestAnimationFrame(fit);
     }
 
     function showFound(found, text) {
@@ -350,33 +725,19 @@
       $('scanText').textContent = text;
     }
 
-    function triggerSeen() {
-      card.seen += 1;
-      save();
-      renderCard();
-      showFound(true, 'Photo detected');
-      $('card').classList.add('seen');
-      const flash = $('flash');
-      flash.classList.add('on');
-      requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove('on')));
-      navigator.vibrate?.(60);
-      onTriggerSeen(card);
-    }
-    function triggerLost() {
-      showFound(false, 'Point at the registered photo');
-      $('card').classList.remove('seen');
-      onTriggerLost(card);
-    }
-
     $('scanBtn').onclick = openScanner;
     $('closeScan').onclick = closeScanner;
     document.addEventListener('visibilitychange', () => { if (document.hidden && stream) closeScanner(); });
 
-    // Expose for testing / wiring actions from the console.
-    window.contextCanvas = { card, onTriggerSeen, triggerSeen, loadMindAR, b64ToBuf };
+    // Exposed for testing and for wiring step 2 from the console.
+    window.contextCanvas = { card, metrics, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit };
 
-    applyView();
+    buildTree();
     renderCard();
+    renderMetrics(false);
+    layout();
+    fit();
+    document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
   </script>
 </body>
 </html>
