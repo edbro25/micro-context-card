@@ -5,54 +5,56 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Context Card · animated</title>
   <style>
+    /* AR-style: the background is transparent so the live camera shows through. */
     :root { --ink: #1d1d1b; --cream: #f6f1e7; --orange: #e4572e; --yellow: #f3a712; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; }
-    body { display: flex; flex-direction: column; background: var(--cream); color: var(--ink);
-      font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif; overflow: hidden; }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif; color: var(--ink); }
 
-    /* ---------- Artwork ---------- */
-    .art { position: relative; flex: 1; min-height: 0; margin: 2.5vmin 2.5vmin 0; border: 1.6vmin solid var(--ink); overflow: hidden;
-      animation: frame-in .5s ease-out both; }
-    .art svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    /* ---------- Floating artwork (portrait-first; the middle stays clear to see the real world) ---------- */
+    .layer { position: fixed; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
     .s { transform-box: fill-box; transform-origin: center; animation: pop .7s cubic-bezier(.2,.9,.3,1.35) both; animation-delay: calc(var(--i) * 55ms); }
-    .s > * { transform-box: fill-box; transform-origin: center; stroke: var(--ink); stroke-width: 2; }
+    .s > * { transform-box: fill-box; transform-origin: center; stroke: var(--ink); stroke-width: 2.5; }
     .bob > * { animation: bob 3.4s ease-in-out infinite; animation-delay: calc(var(--i) * -.41s); }
     .spin > * { animation: spin 11s linear infinite; animation-delay: calc(var(--i) * -.9s); }
     .sway > * { animation: sway 4.2s ease-in-out infinite; animation-delay: calc(var(--i) * -.33s); }
     .draw { fill: none; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100;
       animation: draw 1.6s ease-out forwards, breathe 5s ease-in-out 1.6s infinite; animation-delay: calc(var(--i) * 120ms + .4s), calc(var(--i) * 120ms + 2s); }
 
-    .panel { position: absolute; left: 3.5%; top: 5%; padding: 1.4vmin 2.6vmin 1.8vmin; background: var(--ink); color: var(--cream);
-      line-height: .92; font-weight: 800; letter-spacing: -.02em; animation: slide-in .7s cubic-bezier(.2,.8,.2,1) .25s both; }
-    .panel b { display: block; font-size: 9.5vmin; }
+    .panel { position: fixed; left: 5vw; top: 13vh; padding: 1.4vmin 2.8vmin 1.8vmin; background: var(--ink); color: var(--cream);
+      line-height: .92; font-weight: 800; letter-spacing: -.02em; box-shadow: 0 8px 22px rgba(0,0,0,.35);
+      animation: slide-in .7s cubic-bezier(.2,.8,.2,1) .25s both, float 5s ease-in-out 1s infinite; }
+    .panel b { display: block; font-size: clamp(30px, 9vmin, 64px); }
     .panel b + b { color: var(--yellow); display: inline-block; }
-    .panel small { font-size: 2.6vmin; font-weight: 500; letter-spacing: 0; margin-left: 1vmin; }
+    .panel small { font-size: clamp(10px, 2.6vmin, 16px); font-weight: 500; letter-spacing: 0; margin-left: 1vmin; }
 
-    .qr { position: absolute; right: 4%; top: 5%; display: grid; grid-template-columns: repeat(5, 3vmin); gap: .5vmin; padding: .8vmin;
-      border: .6vmin solid var(--ink); background: var(--cream); animation: pop .6s ease-out .5s both; }
-    .qr i { width: 3vmin; height: 3vmin; background: var(--ink); animation: flicker 2.6s steps(1) infinite; animation-delay: calc(var(--i) * -.37s); }
+    .qr { position: fixed; right: 5vw; top: 13vh; display: grid; grid-template-columns: repeat(5, clamp(8px, 2.6vmin, 16px)); gap: 3px; padding: 5px;
+      border: 3px solid var(--ink); background: var(--cream); box-shadow: 0 8px 22px rgba(0,0,0,.35); animation: pop .6s ease-out .5s both; }
+    .qr i { aspect-ratio: 1; background: var(--ink); animation: flicker 2.6s steps(1) infinite; animation-delay: calc(var(--i) * -.37s); }
     .qr i:nth-child(3n) { background: transparent; }
 
-    .big { position: absolute; right: 5%; bottom: 2%; font-size: 26vmin; font-weight: 900; line-height: .9; letter-spacing: -.04em;
-      color: var(--orange); -webkit-text-stroke: .9vmin var(--ink); paint-order: stroke fill;
+    /* Sits above the floating actions, which wrap to up to three rows on narrow phones. */
+    .big { position: fixed; right: 6vw; bottom: max(27vh, 200px); font-size: clamp(90px, 30vmin, 220px); font-weight: 900; line-height: .9; letter-spacing: -.04em;
+      color: var(--orange); -webkit-text-stroke: clamp(4px, 1vmin, 8px) var(--ink); paint-order: stroke fill; text-shadow: 0 10px 24px rgba(0,0,0,.35);
       animation: rise .8s cubic-bezier(.2,.9,.3,1.3) .6s both, pulse 2.4s ease-in-out 1.6s infinite; transform-origin: 70% 90%; }
 
-    /* ---------- Actions (counted by the Context Canvas camera) ---------- */
-    .actions { flex: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 1.6vmin; padding: 2.2vmin 2.5vmin 2.8vmin; }
-    .actions button { font: 650 clamp(11px, 3.4vmin, 15px)/1 -apple-system, system-ui, sans-serif; color: var(--ink); background: #fff;
-      border: 2px solid var(--ink); border-radius: 999px; padding: 1.7vmin 3vmin; cursor: pointer; transition: transform .12s, background .2s, color .2s;
-      animation: pop .5s ease-out both; animation-delay: calc(var(--i) * 70ms + .9s); }
-    .actions button:active { transform: scale(.94); }
-    .actions .buy { background: var(--orange); color: #fff; animation: pop .5s ease-out 1.3s both, nudge 2.8s ease-in-out 2.4s infinite; }
+    /* ---------- Floating actions (counted by the Context Canvas camera) ---------- */
+    .actions { position: fixed; left: 0; right: 0; bottom: 5vh; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 0 16px; }
+    .actions button { font: 650 clamp(13px, 3.6vmin, 16px)/1 -apple-system, system-ui, sans-serif; color: var(--ink);
+      background: rgba(255,255,255,.88); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      border: 2px solid var(--ink); border-radius: 999px; padding: 11px 16px; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.28);
+      transition: background .2s, color .2s; animation: pop .5s ease-out both, float 3.6s ease-in-out infinite;
+      animation-delay: calc(var(--i) * 70ms + .9s), calc(var(--i) * -.5s); }
+    .actions button:active { scale: .94; }
+    .actions .buy { background: var(--orange); color: #fff; }
     /* The ✓ space is always reserved, so buttons never shift under a finger when one is marked done. */
     .actions [data-action]::after { content: " ✓"; visibility: hidden; }
-    .actions [data-done] { background: var(--ink); color: var(--cream); animation: none; }
+    .actions [data-done] { background: var(--ink); color: var(--cream); }
     .actions [data-done]::after { visibility: visible; }
 
-    @keyframes frame-in { from { opacity: 0; transform: scale(.97); } }
     @keyframes pop { from { opacity: 0; transform: scale(0); } }
-    @keyframes bob { 50% { transform: translateY(-5px); } }
+    @keyframes bob { 50% { transform: translateY(-6px); } }
+    @keyframes float { 50% { translate: 0 -5px; } }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes sway { 50% { transform: rotate(8deg) translateX(3px); } }
     @keyframes draw { to { stroke-dashoffset: 0; } }
@@ -61,7 +63,6 @@
     @keyframes flicker { 50% { opacity: 0; } }
     @keyframes rise { from { opacity: 0; transform: translateY(40%) scale(.6); } }
     @keyframes pulse { 50% { transform: scale(1.05) rotate(-2deg); } }
-    @keyframes nudge { 0%, 80%, 100% { transform: none; } 88% { transform: translateX(-3px); } 94% { transform: translateX(3px); } }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation: none !important; }
@@ -70,67 +71,49 @@
   </style>
 </head>
 <body>
-  <div class="art">
-    <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <!-- lines -->
-      <path class="draw" style="--i:0" pathLength="100" d="M60 262 L140 85" stroke="#e4572e" stroke-width="5"/>
-      <path class="draw" style="--i:1" pathLength="100" d="M70 190 L240 70" stroke="#17bebb" stroke-width="4"/>
-      <path class="draw" style="--i:2" pathLength="100" d="M90 138 L360 165" stroke="#e4572e" stroke-width="4"/>
-      <path class="draw" style="--i:3" pathLength="100" d="M165 222 L285 145" stroke="#1f9d55" stroke-width="4"/>
-      <path class="draw" style="--i:4" pathLength="100" d="M255 148 L400 118" stroke="#17bebb" stroke-width="4"/>
-      <path class="draw" style="--i:5" pathLength="100" d="M195 10 L365 18" stroke="#2f6df6" stroke-width="3"/>
-      <path class="draw" style="--i:6" pathLength="100" d="M95 70 L100 170" stroke="#d7263d" stroke-width="3"/>
+  <svg class="layer" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <!-- accent lines near the edges -->
+    <path class="draw" style="--i:0" pathLength="100" d="M20 330 L112 196" stroke="#e4572e" stroke-width="6"/>
+    <path class="draw" style="--i:1" pathLength="100" d="M280 262 L382 196" stroke="#17bebb" stroke-width="5"/>
+    <path class="draw" style="--i:2" pathLength="100" d="M12 612 L120 700" stroke="#1f9d55" stroke-width="5"/>
+    <path class="draw" style="--i:3" pathLength="100" d="M292 556 L384 640" stroke="#e4572e" stroke-width="5"/>
+    <path class="draw" style="--i:4" pathLength="100" d="M150 150 L244 128" stroke="#2f6df6" stroke-width="4"/>
 
-      <!-- circles -->
-      <g class="s bob" style="--i:1"><circle cx="38" cy="92" r="10" fill="#2f6df6"/></g>
-      <g class="s bob" style="--i:2"><circle cx="78" cy="115" r="21" fill="#17bebb"/></g>
-      <g class="s bob" style="--i:3"><circle cx="116" cy="124" r="15" fill="#2f6df6"/></g>
-      <g class="s bob" style="--i:4"><circle cx="208" cy="118" r="21" fill="#f3a712"/></g>
-      <g class="s bob" style="--i:5"><circle cx="252" cy="100" r="11" fill="#2f6df6"/></g>
-      <g class="s bob" style="--i:6"><circle cx="318" cy="122" r="9" fill="#8e44ad"/></g>
-      <g class="s bob" style="--i:7"><circle cx="324" cy="172" r="19" fill="#17bebb"/></g>
-      <g class="s bob" style="--i:8"><circle cx="342" cy="171" r="14" fill="#f3a712"/></g>
-      <g class="s bob" style="--i:9"><circle cx="157" cy="166" r="13" fill="#d7263d"/></g>
-      <g class="s bob" style="--i:10"><circle cx="284" cy="184" r="14" fill="#1d1d1b"/></g>
-      <g class="s bob" style="--i:11"><circle cx="68" cy="178" r="17" fill="#1f9d55"/></g>
-      <g class="s bob" style="--i:12"><circle cx="211" cy="262" r="18" fill="#2f6df6"/></g>
-      <g class="s bob" style="--i:13"><circle cx="176" cy="258" r="13" fill="#2f6df6"/></g>
-      <g class="s bob" style="--i:14"><circle cx="386" cy="52" r="14" fill="#e4572e"/></g>
-      <g class="s bob" style="--i:15"><circle cx="33" cy="280" r="11" fill="#1d1d1b"/></g>
+    <!-- circles -->
+    <g class="s bob" style="--i:1"><circle cx="40" cy="236" r="16" fill="#2f6df6"/></g>
+    <g class="s bob" style="--i:2"><circle cx="96" cy="212" r="24" fill="#17bebb"/></g>
+    <g class="s bob" style="--i:3"><circle cx="330" cy="292" r="14" fill="#8e44ad"/></g>
+    <g class="s bob" style="--i:4"><circle cx="364" cy="336" r="22" fill="#f3a712"/></g>
+    <g class="s bob" style="--i:5"><circle cx="28" cy="424" r="14" fill="#d7263d"/></g>
+    <g class="s bob" style="--i:6"><circle cx="360" cy="472" r="18" fill="#17bebb"/></g>
+    <g class="s bob" style="--i:7"><circle cx="58" cy="560" r="20" fill="#1f9d55"/></g>
+    <g class="s bob" style="--i:8"><circle cx="338" cy="604" r="12" fill="#2f6df6"/></g>
+    <g class="s bob" style="--i:9"><circle cx="252" cy="186" r="10" fill="#f3a712"/></g>
+    <g class="s bob" style="--i:10"><circle cx="118" cy="660" r="11" fill="#1d1d1b"/></g>
 
-      <!-- triangles -->
-      <g class="s spin" style="--i:16"><polygon points="15,88 52,88 33,126" fill="#17bebb"/></g>
-      <g class="s sway" style="--i:17"><polygon points="240,88 258,120 222,120" fill="#8e44ad"/></g>
-      <g class="s spin" style="--i:18"><polygon points="262,26 300,24 282,60" fill="#d7263d"/></g>
-      <g class="s sway" style="--i:19"><polygon points="140,160 162,212 118,196" fill="#17bebb"/></g>
-      <g class="s spin" style="--i:20"><polygon points="182,206 228,202 204,244" fill="#e4572e"/></g>
-      <g class="s sway" style="--i:21"><polygon points="92,238 58,254 88,288" fill="#8e44ad"/></g>
-      <g class="s spin" style="--i:22"><polygon points="352,140 386,126 372,176" fill="#1f9d55"/></g>
-      <g class="s sway" style="--i:23"><polygon points="272,214 238,190 248,228" fill="#2f6df6"/></g>
-      <g class="s spin" style="--i:24"><polygon points="36,142 72,128 58,164" fill="#1d1d1b"/></g>
+    <!-- triangles -->
+    <g class="s spin" style="--i:11"><polygon points="296,150 338,150 318,192" fill="#d7263d"/></g>
+    <g class="s sway" style="--i:12"><polygon points="18,336 60,318 46,368" fill="#1d1d1b"/></g>
+    <g class="s spin" style="--i:13"><polygon points="348,384 384,398 360,434" fill="#1f9d55"/></g>
+    <g class="s sway" style="--i:14"><polygon points="36,654 80,636 70,690" fill="#8e44ad"/></g>
+    <g class="s spin" style="--i:15"><polygon points="170,236 202,220 192,262" fill="#17bebb"/></g>
 
-      <!-- squares -->
-      <g class="s bob" style="--i:25"><rect x="230" y="64" width="20" height="20" fill="#f3a712"/></g>
-      <g class="s sway" style="--i:26"><rect x="270" y="78" width="26" height="14" fill="#2f6df6"/></g>
-      <g class="s bob" style="--i:27"><rect x="262" y="132" width="18" height="28" fill="#8e44ad"/></g>
-      <g class="s sway" style="--i:28"><rect x="286" y="128" width="28" height="22" fill="#17bebb"/></g>
-      <g class="s bob" style="--i:29"><rect x="354" y="208" width="30" height="22" fill="#8e44ad"/></g>
-      <g class="s sway" style="--i:30"><rect x="24" y="200" width="28" height="14" fill="#f3a712"/></g>
-      <g class="s bob" style="--i:31"><rect x="130" y="150" width="22" height="18" fill="#17bebb"/></g>
-      <g class="s sway" style="--i:32"><rect x="358" y="92" width="22" height="20" fill="#e4572e"/></g>
-      <g class="s bob" style="--i:33"><rect x="128" y="276" width="22" height="20" fill="#d7263d"/></g>
-    </svg>
+    <!-- squares -->
+    <g class="s bob" style="--i:16"><rect x="214" y="226" width="20" height="20" fill="#f3a712"/></g>
+    <g class="s sway" style="--i:17"><rect x="318" y="520" width="26" height="18" fill="#8e44ad"/></g>
+    <g class="s bob" style="--i:18"><rect x="14" y="482" width="24" height="14" fill="#f3a712"/></g>
+    <g class="s sway" style="--i:19"><rect x="140" y="140" width="18" height="18" fill="#e4572e"/></g>
+  </svg>
 
-    <div class="panel"><b>CONTEXT</b><b>CARD</b><small>trigger · step 1</small></div>
-    <div class="qr" aria-hidden="true">
-      <i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i><i style="--i:4"></i><i style="--i:5"></i>
-      <i style="--i:6"></i><i style="--i:7"></i><i style="--i:8"></i><i style="--i:9"></i><i style="--i:10"></i>
-      <i style="--i:11"></i><i style="--i:12"></i><i style="--i:13"></i><i style="--i:14"></i><i style="--i:15"></i>
-      <i style="--i:16"></i><i style="--i:17"></i><i style="--i:18"></i><i style="--i:19"></i><i style="--i:20"></i>
-      <i style="--i:21"></i><i style="--i:22"></i><i style="--i:23"></i><i style="--i:24"></i><i style="--i:25"></i>
-    </div>
-    <div class="big">01</div>
+  <div class="panel"><b>CONTEXT</b><b>CARD</b><small>trigger · step 1</small></div>
+  <div class="qr" aria-hidden="true">
+    <i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i><i style="--i:4"></i><i style="--i:5"></i>
+    <i style="--i:6"></i><i style="--i:7"></i><i style="--i:8"></i><i style="--i:9"></i><i style="--i:10"></i>
+    <i style="--i:11"></i><i style="--i:12"></i><i style="--i:13"></i><i style="--i:14"></i><i style="--i:15"></i>
+    <i style="--i:16"></i><i style="--i:17"></i><i style="--i:18"></i><i style="--i:19"></i><i style="--i:20"></i>
+    <i style="--i:21"></i><i style="--i:22"></i><i style="--i:23"></i><i style="--i:24"></i><i style="--i:25"></i>
   </div>
+  <div class="big">01</div>
 
   <!-- Each data-action is counted by the Context Canvas camera (once per impression). No JavaScript needed here. -->
   <nav class="actions">
@@ -139,7 +122,7 @@
     <button data-action="share" style="--i:2">Share</button>
     <button data-action="follow" style="--i:3">Follow</button>
     <button data-action="learn-more" style="--i:4">Learn more</button>
-    <button class="buy" data-action="buy">Buy <span data-price></span></button>
+    <button class="buy" data-action="buy" style="--i:5">Buy <span data-price></span></button>
   </nav>
 </body>
 </html>
