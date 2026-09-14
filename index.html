@@ -129,6 +129,20 @@
       background: #fff; min-width: 0; width: 100%; }
     .ledger-form .sched-error, .ledger-form .sched-actions { grid-column: 1 / -1; }
 
+    /* ---------- Dashboard spoke (bottom-right of the card): setup checklist ---------- */
+    .dash { position: absolute; width: 210px; font-size: 12.5px; color: var(--muted); }
+    .dash-head { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; margin-bottom: 6px; }
+    .dash-head.ready .status { color: var(--ok); }
+    .check { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 3px 0; background: none; text-align: left;
+      font-size: 12.5px; color: var(--ink); }
+    button.check:hover .check-label { text-decoration: underline; text-underline-offset: 2px; }
+    .check i { flex: none; display: grid; place-items: center; width: 12px; height: 12px; margin-top: 2px; border-radius: 50%;
+      border: 1px solid #b9b9b1; font-style: normal; font-size: 8px; line-height: 1; color: #fff; }
+    .check.done i { background: var(--ok); border-color: var(--ok); }
+    .check.done .check-label { color: var(--muted); }
+    .check small { display: block; font-size: 11px; color: #a3a39b; }
+    .dash-note { margin-top: 8px; font-size: 11.5px; }
+
     /* ---------- Add-experience drawer (sidebar on desktop, pop-out on mobile) ---------- */
     #drawerScrim { position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,.18); }
     #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 92vw); z-index: 30; background: var(--card);
@@ -382,7 +396,7 @@
     const tree = $('tree'), links = $('links'), cardEl = $('card');
     const SPOKE_GAP = 14, SPOKE_LEN = 110, TOP_SPOKE_LEN = 56, DIAG_SPOKE_LEN = 72, LABEL_GAP = 10, STATS_GAP = 28;
     let bounds = { tree: null, root: null };
-    let statsEl, spokeLabel, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl;
+    let statsEl, spokeLabel, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl, dashLabel, dashEl;
 
     function buildTree() {
       spokeLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Statistics' });
@@ -404,10 +418,12 @@
       schedEl = Object.assign(document.createElement('div'), { className: 'sched' });
       ledgerLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Ledger' });
       ledgerEl = Object.assign(document.createElement('div'), { className: 'ledger' });
-      tree.append(spokeLabel, statsEl, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl);
+      dashLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Dashboard' });
+      dashEl = Object.assign(document.createElement('div'), { className: 'dash' });
+      tree.append(spokeLabel, statsEl, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl, dashLabel, dashEl);
     }
 
-    // Spokes from the card: Ledger top-left, Schedule above, Statistics left, Experiences right; content sits beyond each label.
+    // Spokes from the card: Ledger top-left, Schedule above, Statistics left, Experiences right, Dashboard bottom-right.
     function layout() {
       const cardLeft = -cardEl.offsetWidth / 2, cardTop = -cardEl.offsetHeight / 2;
       const lineStart = cardLeft - SPOKE_GAP, dotX = lineStart - SPOKE_LEN;
@@ -450,9 +466,19 @@
       ledgerEl.style.left = ledgerLeft + 'px';
       ledgerEl.style.top = ledgerTop + 'px';
 
-      const minX = Math.min(statsLeft, ledgerLeft), maxX = expLeft + expList.offsetWidth;
+      const bStartX = -cardLeft + 8, bStartY = -cardTop + 8, bDotX = bStartX + DIAG_SPOKE_LEN, bDotY = bStartY + DIAG_SPOKE_LEN;
+      links.insertAdjacentHTML('beforeend', `<path id="link-dash" d="M${bStartX} ${bStartY} L${bDotX} ${bDotY}"/><circle cx="${bDotX}" cy="${bDotY}" r="2.5"/>`);
+      const dashLabelCenter = bDotY + LABEL_GAP + dashLabel.offsetHeight / 2;
+      dashLabel.style.left = bDotX - dashLabel.offsetWidth / 2 + 'px';
+      dashLabel.style.top = dashLabelCenter + 'px';
+      const dashLeft = bDotX - dashEl.offsetWidth / 2;
+      const dashTop = dashLabelCenter + dashLabel.offsetHeight / 2 + 12;
+      dashEl.style.left = dashLeft + 'px';
+      dashEl.style.top = dashTop + 'px';
+
+      const minX = Math.min(statsLeft, ledgerLeft), maxX = Math.max(expLeft + expList.offsetWidth, dashLeft + dashEl.offsetWidth);
       const top = Math.min(cardTop, statsTop, expTop, schedTop, ledgerTop);
-      const bottom = Math.max(-cardTop, -statsTop, expTop + expList.offsetHeight);
+      const bottom = Math.max(-cardTop, -statsTop, expTop + expList.offsetHeight, dashTop + dashEl.offsetHeight);
       bounds.tree = { x: minX, y: top, w: maxX - minX, h: bottom - top };
       bounds.root = { x: cardLeft, y: cardTop, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
     }
@@ -483,6 +509,7 @@
         l.rendered = true;
       }
       $('seenCount').textContent = metrics.impressions ? `Seen ${metrics.impressions}×` : '';
+      renderDashboard();
     }
 
     /* ---------------- Canvas pan & zoom ---------------- */
@@ -591,6 +618,7 @@
       if (!card.photo) setStatus('No photo registered');
       else if (card.target) setStatus('Photo registered', 'ready');
       else if (!registeringLocally) setStatus('Registering on another device…', 'busy');
+      renderDashboard();
     }
 
     $('title').addEventListener('input', () => {
@@ -933,6 +961,7 @@
       if (schedEditing) schedEl.append(scheduleForm());
       else if (schedule) schedEl.append(...scheduleSummary());
       else schedEl.append(linkButton('+ Set campaign dates', () => { schedEditing = true; renderSchedule(); }));
+      renderDashboard();
       if (bounds.tree) layout();
     }
 
@@ -1038,6 +1067,7 @@
       } else if (open > 0) {
         ledgerEl.append(linkButton('+ Add stakeholder', () => { ledgerAdding = true; renderLedger(); }));
       }
+      renderDashboard();
       if (bounds.tree) layout();
     }
 
@@ -1155,6 +1185,7 @@
       const add = Object.assign(document.createElement('button'), { className: 'exp-link', textContent: '+ Add experience' });
       add.onclick = openDrawer;
       expList.append(add);
+      renderDashboard();
       if (bounds.tree) layout();
     }
 
@@ -1338,6 +1369,59 @@
       closeDrawer();
     });
 
+    /* ---------------- Dashboard: setup checklist (the dashboard unlocks when all are done) ---------------- */
+    let lastDashKey = '';
+
+    function dashboardChecks() {
+      const used = allocatedBps();
+      const exps = Object.values(experiences);
+      return [
+        { id: 'photo', label: 'Photo registered', done: !!card.target },
+        { id: 'schedule', label: 'Campaign dates set', done: !!schedule, hint: 'Set a start and end date',
+          go: () => { schedEditing = true; renderSchedule(); } },
+        { id: 'ledger', label: `Ledger at ${fmtPct(STAKEHOLDER_BPS)}`, done: used === STAKEHOLDER_BPS,
+          hint: `${fmtPct(used)} of ${fmtPct(STAKEHOLDER_BPS)} allocated`, go: () => { ledgerAdding = true; renderLedger(); } },
+        { id: 'experience', label: 'An active experience', done: exps.some((x) => x.active),
+          hint: exps.length ? 'All experiences are paused' : 'Add an HTML experience', go: exps.length ? null : openDrawer },
+      ];
+    }
+
+    function renderDashboard() {
+      if (!dashEl) return;
+      const checks = dashboardChecks();
+      const doneCount = checks.filter((c) => c.done).length;
+      const ready = doneCount === checks.length;
+      const key = JSON.stringify([checks.map((c) => [c.done, c.hint]), ready && metrics.impressions]);
+      if (key === lastDashKey) return;
+      lastDashKey = key;
+
+      dashEl.replaceChildren();
+      const head = Object.assign(document.createElement('div'), { className: 'dash-head' + (ready ? ' ready' : '') });
+      head.append(
+        Object.assign(document.createElement('span'), { textContent: 'Setup' }),
+        Object.assign(document.createElement('span'), { className: 'status', textContent: ready ? 'Ready' : `${doneCount} of ${checks.length}` }),
+      );
+      dashEl.append(head);
+
+      for (const c of checks) {
+        const actionable = !c.done && c.go;
+        const item = document.createElement(actionable ? 'button' : 'div');
+        item.className = 'check' + (c.done ? ' done' : '');
+        if (actionable) { item.type = 'button'; item.onclick = c.go; }
+        const label = Object.assign(document.createElement('span'), { className: 'check-label', textContent: c.label });
+        if (!c.done && c.hint) label.append(Object.assign(document.createElement('small'), { textContent: c.hint }));
+        item.append(Object.assign(document.createElement('i'), { textContent: c.done ? '✓' : '' }), label);
+        dashEl.append(item);
+      }
+      if (ready) {
+        dashEl.append(Object.assign(document.createElement('div'), {
+          className: 'dash-note',
+          textContent: metrics.impressions ? `Collecting data · ${plural(metrics.impressions, 'impression')} so far` : 'Waiting for the first scan',
+        }));
+      }
+      if (bounds.tree) layout();
+    }
+
     /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
     // Firebase web config (public by design; access is governed by database rules). Set to null to run on this device only.
     const FIREBASE_CONFIG = {
@@ -1487,7 +1571,7 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
