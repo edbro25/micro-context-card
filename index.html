@@ -369,7 +369,7 @@
     <div class="drawer-head"><b>New experience</b><button class="pill" id="drawerClose" type="button">Close</button></div>
     <form class="drawer-body" id="expForm" novalidate>
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose an HTML file">
-        <div id="dropText">Drop an HTML file here<br><small>or tap to choose · JavaScript is removed</small></div>
+        <div id="dropText">Drop an HTML file here<br><small>or tap to choose · JavaScript is removed<br>Buttons with data-action (like, save, share, follow, learn-more, buy) count toward stats</small></div>
       </div>
       <input type="file" id="htmlInput" accept=".html,.htm,text/html" hidden>
       <label class="field">Title<input id="expTitle" placeholder="e.g. In-stadium welcome" maxlength="80" autocomplete="off"></label>
@@ -401,7 +401,7 @@
     <div id="flash"></div>
     <div class="guide" id="guide"></div>
     <div id="expOverlay" hidden>
-      <iframe sandbox="" title="Experience"></iframe>
+      <iframe sandbox="allow-scripts" title="Experience"></iframe>
       <button class="exp-close" id="expClose" aria-label="Close experience">✕</button>
     </div>
     <div class="scan-top">
@@ -1379,7 +1379,9 @@
 
     function showExperience(x) {
       currentExp = x;
-      $('expOverlay').querySelector('iframe').srcdoc = x.html;
+      const frame = $('expOverlay').querySelector('iframe');
+      frame.onload = () => frame.contentWindow?.postMessage({ source: 'context-canvas', type: 'init', price: x.priceCents ? fmtMoney(x.priceCents) : '' }, '*');
+      frame.srcdoc = withActionBridge(sanitizeExperienceHtml(x.html).html);
       $('expOverlay').hidden = false;
       const entry = { at: Date.now(), ...(here ? { lat: +here.lat.toFixed(5), lng: +here.lng.toFixed(5) } : {}) };
       upsertExperience({ ...x, plays: (x.plays || 0) + 1, lastPlayedAt: entry.at, history: [...(x.history || []), entry].slice(-5) });
@@ -1390,6 +1392,7 @@
       if (!currentExp) return;
       currentExp = null;
       $('expOverlay').hidden = true;
+      $('expOverlay').querySelector('iframe').onload = null;
       $('expOverlay').querySelector('iframe').srcdoc = '';
       updateBuy();
       renderExperiences();
@@ -1444,6 +1447,56 @@
       setLocChip('');
     }
 
+    /* ---- Experience HTML: sanitizing and in-camera actions ---- */
+    // Experience HTML never carries its own JavaScript. Scripts, embeds, refreshes, inline handlers and
+    // script-like URLs are removed on upload and again before showing.
+    function sanitizeExperienceHtml(text) {
+      const doc = new DOMParser().parseFromString(text, 'text/html');
+      doc.querySelectorAll('script, noscript, iframe, frame, frameset, object, embed, applet, base, portal, meta[http-equiv], link[rel~="import"]').forEach((n) => n.remove());
+      doc.querySelectorAll('set, animate').forEach((n) => { if (/href/i.test(n.getAttribute('attributeName') || '')) n.remove(); });
+      doc.querySelectorAll('*').forEach((el) => [...el.attributes].forEach((a) => {
+        const value = a.value.replace(/[\s\x00-\x1f]/g, '');
+        if (/^on/i.test(a.name) || /^(srcdoc|formaction)$/i.test(a.name) || /^(javascript|vbscript|data:text\/html)/i.test(value)) el.removeAttribute(a.name);
+      }));
+      return { html: '<!doctype html>\n' + doc.documentElement.outerHTML, title: doc.title.trim() };
+    }
+
+    // Our own small script, injected into the sandboxed frame: it turns taps on [data-action] elements
+    // into messages for the camera, and marks them done when the camera confirms.
+    function experienceBridge() {
+      const ACTIONS = ['like', 'comment', 'save', 'share', 'follow', 'learn-more', 'buy'];
+      document.addEventListener('click', (e) => {
+        const target = e.target.closest('[data-action], a[href]');
+        if (!target) return;
+        e.preventDefault();
+        const action = target.getAttribute('data-action');
+        if (ACTIONS.includes(action)) parent.postMessage({ source: 'context-experience', action }, '*');
+      });
+      addEventListener('message', (e) => {
+        const data = e.data || {};
+        if (e.source !== parent || data.source !== 'context-canvas') return;
+        if (data.type === 'init') document.querySelectorAll('[data-price]').forEach((n) => { n.textContent = data.price || ''; });
+        if (data.type === 'done' && ACTIONS.includes(data.action)) {
+          document.querySelectorAll('[data-action="' + data.action + '"]').forEach((n) => n.setAttribute('data-done', ''));
+        }
+      });
+    }
+    const withActionBridge = (html) => html.replace(/<\/body>/i, '<scr' + 'ipt>(' + experienceBridge.toString() + ')();</scr' + 'ipt></body>');
+
+    const EXPERIENCE_ACTIONS = { like: 'like', comment: 'comment', save: 'save', share: 'share', follow: 'follow', 'learn-more': 'tap', buy: 'buy' };
+    addEventListener('message', (e) => {
+      const frame = $('expOverlay').querySelector('iframe');
+      const data = e.data || {};
+      if (e.source !== frame.contentWindow || data.source !== 'context-experience') return;
+      const type = EXPERIENCE_ACTIONS[data.action];
+      if (!type || !currentExp) return;
+      if (!imp) return nudge();
+      if (type === 'buy') $('buyBtn').click();
+      else act(type);
+      const done = type === 'buy' ? imp?.purchased : type !== 'comment' && imp?.actions[type];
+      if (done) frame.contentWindow.postMessage({ source: 'context-canvas', type: 'done', action: data.action }, '*');
+    });
+
     /* ---- Drawer: add an experience ---- */
     let draft = null;
     function formError(msg) { $('expError').textContent = msg; }
@@ -1473,14 +1526,9 @@
       if (!file) return;
       if (!/\.html?$/i.test(file.name) && file.type !== 'text/html') return formError('Please choose an .html file');
       if (file.size > MAX_HTML_BYTES) return formError('That HTML file is over 300 KB');
-      const doc = new DOMParser().parseFromString(await file.text(), 'text/html');
-      // No JavaScript for now: strip scripts, embeds, refreshes, inline handlers and javascript: URLs.
-      doc.querySelectorAll('script, noscript, iframe, frame, object, embed, meta[http-equiv]').forEach((n) => n.remove());
-      doc.querySelectorAll('*').forEach((el) => [...el.attributes].forEach((a) => {
-        if (/^on/i.test(a.name) || /^\s*javascript:/i.test(a.value)) el.removeAttribute(a.name);
-      }));
-      draft = { html: '<!doctype html>\n' + doc.documentElement.outerHTML };
-      if (!$('expTitle').value.trim()) $('expTitle').value = (doc.title.trim() || file.name.replace(/\.html?$/i, '')).slice(0, 80);
+      const clean = sanitizeExperienceHtml(await file.text());
+      draft = { html: clean.html };
+      if (!$('expTitle').value.trim()) $('expTitle').value = (clean.title || file.name.replace(/\.html?$/i, '')).slice(0, 80);
       const drop = $('drop');
       drop.querySelectorAll('.file-name, iframe').forEach((n) => n.remove());
       $('dropText').hidden = true;
@@ -2345,7 +2393,7 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
