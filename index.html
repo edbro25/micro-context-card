@@ -37,6 +37,14 @@
     .sync.live i { background: var(--ok); }
     .sync.scan i { background: var(--accent); animation: blink 1s infinite; }
     @media (max-width: 440px) { .brand { display: none; } }
+    .city-toggle { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+    .city-toggle button { padding: 6px 10px; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 650; line-height: 1; }
+    .city-toggle button.on { background: var(--ink); color: #fff; }
+    .scan-right { display: flex; align-items: center; gap: 8px; flex: none; }
+    .scan-top > span:first-child { min-width: 0; margin-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .scan-top .city-toggle { background: rgba(0,0,0,.45); border-color: transparent; }
+    .scan-top .city-toggle button { padding: 6px 10px; background: transparent; color: #fff; text-shadow: none; }
+    .scan-top .city-toggle button.on { background: #fff; color: var(--ink); }
     .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px;
       padding: 8px 14px; font-size: 13px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 
@@ -353,6 +361,7 @@
       <span class="pill sync" id="syncPill" hidden><i></i><span id="syncText">Connecting…</span></span>
     </div>
     <div class="actions">
+      <div class="city-toggle" role="group" aria-label="Demo city"><button type="button" data-city="nyc">NYC</button><button type="button" data-city="la">LA</button></div>
       <button class="pill" id="resetBtn" hidden>Reset metrics</button>
       <button class="pill" id="recenter">Fit</button>
     </div>
@@ -403,7 +412,10 @@
     </div>
     <div class="scan-top">
       <span><span id="scanTitle"></span><span class="loc-chip" id="locChip"></span></span>
-      <button id="closeScan">Done</button>
+      <div class="scan-right">
+        <div class="city-toggle" role="group" aria-label="Demo city"><button type="button" data-city="nyc">NYC</button><button type="button" data-city="la">LA</button></div>
+        <button id="closeScan">Done</button>
+      </div>
     </div>
     <div class="rail" id="rail">
       <button data-act="like" aria-label="Like">❤️</button>
@@ -1010,6 +1022,7 @@
       pushLive(true);
       if (sync.on) sync.api.onDisconnect(roomRef('live')).remove();
       startLocation();
+      applyDemoCity();
       setRail(false);
       requestAnimationFrame(fit);
       $('scanTitle').textContent = card.title;
@@ -1439,11 +1452,12 @@
       setLocChip('📍 locating…');
       geoWatch = navigator.geolocation.watchPosition(
         (p) => {
+          if (demoCity) return;   // a demo city overrides real GPS
           here = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) };
           setLocChip(`📍 ±${here.acc} m`);
           pushLive();
         },
-        () => setLocChip('📍 off'),
+        () => (demoCity ? applyDemoCity() : setLocChip('📍 off')),
         { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
       );
     }
@@ -1452,6 +1466,35 @@
       geoWatch = null;
       setLocChip('');
     }
+
+    /* ---- Demo city: pretend this phone is in NYC or LA so each city's experiences play ---- */
+    const CITY_KEY = 'contextCanvas.city';
+    const CITIES = { nyc: { name: 'NYC', lat: 40.7128, lng: -74.006 }, la: { name: 'LA', lat: 34.0522, lng: -118.2437 } };
+    // Defaults to NYC; tapping the selected city turns the demo off and real GPS is used again.
+    let demoCity = (() => { try { const c = localStorage.getItem(CITY_KEY); return c === 'off' ? null : CITIES[c] ? c : 'nyc'; } catch { return 'nyc'; } })();
+
+    function applyDemoCity() {
+      if (demoCity) here = { lat: CITIES[demoCity].lat, lng: CITIES[demoCity].lng, acc: 50 };
+      document.querySelectorAll('[data-city]').forEach((b) => {
+        b.classList.toggle('on', b.dataset.city === demoCity);
+        b.setAttribute('aria-pressed', String(b.dataset.city === demoCity));
+      });
+      if (!$('scanner').hidden) setLocChip(demoCity ? `📍 ${CITIES[demoCity].name} (demo)` : here ? `📍 ±${here.acc} m` : '📍 locating…');
+    }
+
+    function setDemoCity(city) {
+      demoCity = demoCity === city ? null : city;
+      try { localStorage.setItem(CITY_KEY, demoCity || 'off'); } catch {}
+      if (!demoCity) here = null;   // wait for the next real GPS reading
+      applyDemoCity();
+      if (imp && !imp.lostAt) {      // swap what's on screen right away
+        hideExperience();
+        const next = pickExperience();
+        if (next) { showExperience(next); imp.expId = next.id; }
+        pushLive(true);
+      }
+    }
+    document.querySelectorAll('[data-city]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); setDemoCity(b.dataset.city); }));
 
     /* ---- Experience HTML: sanitizing and in-camera actions ---- */
     // Experience HTML never carries its own JavaScript. Scripts, embeds, refreshes, inline handlers and
@@ -2444,7 +2487,7 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
@@ -2452,6 +2495,7 @@
     renderExperiences();
     renderSchedule();
     renderLedger();
+    applyDemoCity();
     layout();
     fit();
     document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
