@@ -253,6 +253,63 @@
     @keyframes expIn { from { opacity: 0; transform: translateY(8px) scale(.98); } }
     .loc-chip { margin-left: 8px; font-size: 12px; opacity: .9; }
 
+    /* ---------- Report (full-screen, printable) ---------- */
+    .dash-report { margin: -2px 0 8px; }
+    #report { position: fixed; inset: 0; z-index: 40; overflow-y: auto; background: #f9f9f7; color: #0b0b0b; -webkit-overflow-scrolling: touch; }
+    .rp-toolbar { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: rgba(249,249,247,.94); border-bottom: 1px solid rgba(11,11,11,.08);
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+    .rp-toolbar .actions { display: flex; gap: 8px; }
+    .rp { --rp-surface: #fcfcfb; --rp-text-2: #52514e; --rp-muted: #898781; --rp-grid: #e1e0d9; --rp-axis: #c3c2b7;
+      max-width: 880px; margin: 0 auto; padding: 20px 16px 64px; display: grid; gap: 14px; }
+    .rp-section { background: var(--rp-surface); border: 1px solid rgba(11,11,11,.08); border-radius: 14px; padding: 20px; break-inside: avoid; min-width: 0; }
+    .rp-section h2 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+    .rp-sub { margin: 0 0 16px; font-size: 12.5px; color: var(--rp-text-2); }
+    .rp-h3 { margin: 16px 0 6px; font-size: 12px; font-weight: 500; color: var(--rp-text-2); }
+    .rp-head { display: flex; gap: 16px; align-items: center; }
+    .rp-thumb { width: 96px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; flex: none; }
+    .rp-kicker { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--rp-muted); }
+    .rp-head h1 { margin: 2px 0 4px; font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+    .rp-meta { margin: 0; font-size: 12.5px; color: var(--rp-text-2); }
+    .rp-hero span { display: block; font-size: 12.5px; color: var(--rp-text-2); }
+    .rp-hero b { display: block; font-size: 56px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05; }
+    .rp-hero small { display: block; margin-top: 4px; font-size: 12.5px; color: var(--rp-text-2); }
+    .rp-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 14px 16px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--rp-grid); }
+    .rp-tile span { display: block; font-size: 12px; color: var(--rp-text-2); }
+    .rp-tile b { font-size: 22px; font-weight: 600; }
+    .rp-bar-row { display: grid; grid-template-columns: minmax(96px, 28%) 1fr; align-items: center; gap: 12px; padding: 3px 0; font-size: 13px; outline: none; }
+    .rp-bar-row:focus-visible { background: rgba(42,120,214,.06); border-radius: 6px; }
+    .rp-bar-label { color: #0b0b0b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rp-track { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .rp-track i { display: block; flex: none; height: 20px; border-radius: 0 4px 4px 0; }
+    .rp-bar-value { color: var(--rp-text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .rp-chart { display: block; overflow: visible; }
+    .rp-grid { stroke: var(--rp-grid); stroke-width: 1; }
+    .rp-axis { stroke: var(--rp-axis); stroke-width: 1; }
+    .rp-tick { font-size: 11px; fill: var(--rp-muted); font-variant-numeric: tabular-nums; }
+    .rp-chart rect[data-tip] { outline: none; }
+    .rp-chart rect[data-tip]:hover, .rp-chart rect[data-tip]:focus { fill: rgba(42,120,214,.07); }
+    .rp-stack { display: flex; gap: 2px; height: 22px; }
+    .rp-stack i { display: block; min-width: 2px; outline: none; }
+    .rp-stack i:first-child { border-radius: 4px 0 0 4px; }
+    .rp-stack i:last-child { border-radius: 0 4px 4px 0; }
+    .rp-stack i:only-child { border-radius: 4px; }
+    .rp-legend { display: grid; grid-template-columns: 1fr auto auto; gap: 5px 18px; margin-top: 14px; font-size: 13px; }
+    .rp-legend-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .rp-legend-name i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+    .rp-num { text-align: right; font-variant-numeric: tabular-nums; }
+    .rp-num.muted { color: var(--rp-muted); }
+    .rp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .rp-table th { padding: 0 0 6px 10px; font-size: 11.5px; font-weight: 500; color: var(--rp-muted); text-align: right; border-bottom: 1px solid var(--rp-grid); }
+    .rp-table td { padding: 6px 0 6px 10px; text-align: right; font-variant-numeric: tabular-nums; border-bottom: 1px solid #f0efec; }
+    .rp-table th:first-child, .rp-table td:first-child { padding-left: 0; text-align: left; }
+    .rp-table tr:last-child td { border-bottom: 0; }
+    .rp-section details summary { margin-top: 12px; font-size: 12.5px; color: var(--rp-text-2); cursor: pointer; }
+    .rp-section details .rp-table { margin-top: 8px; }
+    .rp-empty { margin: 0; font-size: 13px; color: var(--rp-muted); }
+    .rp-foot { margin: 4px 0 0; font-size: 12px; color: var(--rp-muted); text-align: center; }
+    .rp-tip { position: fixed; z-index: 45; pointer-events: none; background: #0b0b0b; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
+
     /* While scanning: camera and live canvas share the screen */
     body.scanning .topbar { display: none; }
     body.scanning #scanner { inset: 0 0 42% 0; }
@@ -260,6 +317,15 @@
     @media (min-aspect-ratio: 1/1) {
       body.scanning #scanner { inset: 0 50% 0 0; }
       body.scanning #canvas { inset: 0 0 0 50%; border-top: 0; border-left: 1px solid var(--line); }
+    }
+    @media print {
+      @page { margin: 14mm; }
+      html:has(body.report-open), body.report-open { height: auto; overflow: visible; background: #fff; }
+      body.report-open > *:not(#report) { display: none !important; }
+      body.report-open #report { position: static; overflow: visible; background: #fff; }
+      #report .rp-toolbar, #report details, .rp-tip { display: none !important; }
+      .rp { max-width: none; padding: 0; }
+      .rp-section { border-color: #ddd; }
     }
   </style>
 </head>
@@ -356,6 +422,19 @@
       <input id="commentInput" placeholder="Add a comment…" autocomplete="off" enterkeyhint="send">
       <button type="submit">Post</button>
     </form>
+  </div>
+
+  <!-- Report: a fuller, printable view of the dashboard -->
+  <div id="report" hidden>
+    <div class="rp-toolbar">
+      <button class="pill" id="reportClose" type="button">← Canvas</button>
+      <div class="actions">
+        <button class="pill" id="reportCopy" type="button">Copy link</button>
+        <button class="pill" id="reportPrint" type="button">Save as PDF</button>
+      </div>
+    </div>
+    <main class="rp" id="reportBody"></main>
+    <div class="rp-tip" id="rpTip" hidden></div>
   </div>
 
   <script type="module">
@@ -1553,6 +1632,7 @@
       const key = JSON.stringify([checks.map((c) => [c.done, c.hint]), full, eventsVersion, schedule, allocatedBps(), lastExpKey, today, !full && ready && metrics.impressions]);
       if (key === lastDashKey) return;
       lastDashKey = key;
+      scheduleReport();
 
       dashEl.replaceChildren();
       dashEl.classList.toggle('full', full);
@@ -1604,7 +1684,7 @@
     }
 
     // Everything the dashboard shows, derived from the event log (synced across devices).
-    function dashboardModel() {
+    function dashboardModel(recentCount = 6) {
       const list = Object.values(events).sort((a, b) => a.t - b.t);
       const imps = list.filter((e) => e.type === 'impression');
       const buys = list.filter((e) => e.type === 'purchase');
@@ -1676,7 +1756,7 @@
       ] : [];
 
       const LABELS = { like: 'Like', save: 'Save', share: 'Share', follow: 'Follow', tap: 'Learn more', 'lean-in': 'Leaned in' };
-      model.recent = list.slice(-6).reverse().map((e) => {
+      model.recent = list.slice(-recentCount).reverse().map((e) => {
         let what = LABELS[e.type] || e.type;
         if (e.type === 'impression') what = e.dwellMs != null ? `Seen ${sec(e.dwellMs)}` : 'In view now';
         if (e.type === 'purchase') what = `Purchase ${fmtMoney(e.amountCents || 0)}`;
@@ -1693,7 +1773,9 @@
 
       const head = el('div', 'dash-head');
       head.append(el('span', '', 'Overview'), el('span', 'status', model.updated ? `Updated ${timeLabel(model.updated)}` : 'Waiting for the first scan'));
-      dashEl.append(head);
+      const reportLink = linkButton('Open report ↗', openReport);
+      reportLink.classList.add('dash-report');
+      dashEl.append(head, reportLink);
       for (const c of checks) if (!c.done) dashEl.append(el('div', 'dash-warn', c.warn));
 
       const kpis = el('div', 'kpis');
@@ -1773,7 +1855,345 @@
       }
     }
 
-    /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */    /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
+    /* ---------------- Report: a fuller, printable view built from the same event log ---------------- */
+    // Palette (validated): slot-1 blue for single series, an ordinal blue ramp for the funnel,
+    // categorical slots in ledger order for stakeholders (color follows the stakeholder, not their rank).
+    const RP = {
+      blue: '#2a78d6',
+      ordinal: ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab'],
+      slots: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'],
+      platform: '#898781', other: '#c3c2b7', unallocated: '#e1e0d9',
+    };
+    const svgNS = 'http://www.w3.org/2000/svg';
+    let reportTimer = null;
+
+    const h = (tag, className, text) => Object.assign(document.createElement(tag), className ? { className } : {}, text != null ? { textContent: text } : {});
+    const svgEl = (tag, attrs = {}) => { const n = document.createElementNS(svgNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
+    const fmtDay = (t, year) => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric', ...(year ? { year: 'numeric' } : {}) });
+    const niceMax = (v) => { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)); const m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; };
+    const reportOpen = () => !$('report').hidden;
+
+    function setViewParam(view) {
+      const url = new URL(location.href);
+      view ? url.searchParams.set('view', view) : url.searchParams.delete('view');
+      history.replaceState(null, '', url);
+    }
+    function openReport() {
+      $('report').hidden = false;
+      document.body.classList.add('report-open');
+      setViewParam('report');
+      renderReport();
+      $('report').scrollTop = 0;
+    }
+    function closeReport() {
+      $('report').hidden = true;
+      $('rpTip').hidden = true;
+      document.body.classList.remove('report-open');
+      setViewParam(null);
+    }
+    function scheduleReport() {
+      if (!reportOpen()) return;
+      clearTimeout(reportTimer);
+      reportTimer = setTimeout(renderReport, 250);
+    }
+
+    function campaignStatus() {
+      if (!schedule) return '';
+      const start = parseDay(schedule.start), end = parseDay(schedule.end), now = new Date();
+      const total = Math.round((end - start) / DAY_MS) + 1;
+      const day = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - start) / DAY_MS) + 1;
+      return day < 1 ? `Starts in ${plural(1 - day, 'day')}` : day > total ? 'Ended' : `Day ${day} of ${total}`;
+    }
+
+    function reportData() {
+      const list = Object.entries(events).map(([id, e]) => ({ id, ...e })).sort((a, b) => a.t - b.t);
+      const imps = list.filter((e) => e.type === 'impression');
+      const buys = list.filter((e) => e.type === 'purchase');
+      const acts = list.filter((e) => e.type !== 'impression');
+      const typesByImp = new Map();
+      for (const e of acts) if (e.imp) (typesByImp.get(e.imp) || typesByImp.set(e.imp, new Set()).get(e.imp)).add(e.type);
+      const did = (imp, types) => types.some((t) => typesByImp.get(imp.id)?.has(t) || imp.actions?.includes(t));
+      const revenue = buys.reduce((n, e) => n + (e.amountCents || 0), 0);
+
+      const funnel = [
+        ['Impressions', imps.length],
+        ['Held ≥ 1s', imps.filter((e) => e.viewed).length],
+        ['Engaged', imps.filter((e) => did(e, ['like', 'comment', 'save', 'share'])).length],
+        ['Purchased', imps.filter((e) => did(e, ['purchase'])).length],
+      ];
+      const mix = [['like', 'Likes'], ['comment', 'Comments'], ['save', 'Saves'], ['share', 'Shares'], ['follow', 'Follows'], ['tap', 'Learn more'], ['lean-in', 'Leaned in'], ['purchase', 'Purchases']]
+        .map(([type, label]) => [label, acts.filter((e) => e.type === type).length]);
+
+      // One row per campaign day (or per active day without a schedule).
+      const dayKey = (t) => { const d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+      const days = [];
+      let first = null, last = null;
+      if (schedule) { first = parseDay(schedule.start).getTime(); last = parseDay(schedule.end).getTime(); }
+      else if (list.length) { first = dayKey(list[0].t); last = dayKey(list[list.length - 1].t); }
+      if (first != null) {
+        const today = dayKey(Date.now());
+        for (let d = new Date(first); d.getTime() <= last && days.length < 400; d.setDate(d.getDate() + 1)) {
+          days.push({ t: d.getTime(), imps: 0, revenue: 0, future: d.getTime() > today, today: d.getTime() === today });
+        }
+        const index = new Map(days.map((d, i) => [d.t, i]));
+        for (const e of imps) { const i = index.get(dayKey(e.t)); if (i != null) days[i].imps++; }
+        for (const e of buys) { const i = index.get(dayKey(e.t)); if (i != null) days[i].revenue += e.amountCents || 0; }
+      }
+
+      const revenueByExp = new Map();
+      for (const e of buys) {
+        const title = e.exp ? experiences[e.exp]?.title || 'Deleted experience' : 'No experience';
+        revenueByExp.set(title, (revenueByExp.get(title) || 0) + (e.amountCents || 0));
+      }
+
+      // Payouts in ledger order; stakeholders past the sixth color fold into "Other".
+      const order = Object.values(stakeholders).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).map((x) => x.name);
+      const owed = new Map();
+      let platform = 0, unallocated = 0;
+      for (const e of buys) {
+        const split = e.split || {};
+        platform += split.platformCents || 0;
+        unallocated += split.unallocatedCents || 0;
+        for (const x of split.shares || []) {
+          owed.set(x.name, (owed.get(x.name) || 0) + (x.cents || 0));
+          if (!order.includes(x.name)) order.push(x.name);
+        }
+      }
+      const segs = [];
+      let otherCents = 0, otherCount = 0;
+      order.forEach((name, i) => {
+        const cents = owed.get(name) || 0;
+        if (order.length > RP.slots.length && i >= RP.slots.length - 1) { otherCents += cents; otherCount++; }
+        else segs.push({ name, cents, color: RP.slots[i] });
+      });
+      if (otherCount) segs.push({ name: `Other stakeholders (${otherCount})`, cents: otherCents, color: RP.other });
+      segs.push({ name: `${PLATFORM_NAME} · platform fee`, cents: platform, color: RP.platform });
+      if (unallocated) segs.push({ name: 'Unallocated', cents: unallocated, color: RP.unallocated });
+
+      return {
+        model: dashboardModel(15), imps, buys, revenue, funnel, mix, days, segs,
+        revenueByExp: [...revenueByExp].sort((a, b) => b[1] - a[1]),
+      };
+    }
+
+    // Single-series column chart: one baseline, 4px rounded caps (<= 24px wide), hairline grid, per-column tooltips.
+    function columnChart(days, key, fmt, label, width) {
+      const W = Math.round(width), H = 150, padL = 52, padR = 6, padT = 8, padB = 22;
+      const chart = svgEl('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: 'rp-chart', role: 'img', 'aria-label': label });
+      const max = niceMax(Math.max(0, ...days.map((d) => d[key])));
+      const plotW = W - padL - padR, plotH = H - padT - padB, band = plotW / Math.max(days.length, 1);
+      const barW = Math.max(1, Math.min(24, band * 0.7));
+      const y = (v) => padT + plotH - (v / max) * plotH;
+      chart.append(svgEl('line', { x1: padL, x2: W - padR, y1: y(max / 2), y2: y(max / 2), class: 'rp-grid' }));
+      chart.append(svgEl('line', { x1: padL, x2: W - padR, y1: y(max), y2: y(max), class: 'rp-grid' }));
+      for (const v of [0, max]) {
+        const tick = svgEl('text', { x: padL - 8, y: y(v) + 4, class: 'rp-tick', 'text-anchor': 'end' });
+        tick.textContent = fmt(v);
+        chart.append(tick);
+      }
+      days.forEach((d, i) => {
+        const v = d[key], x = padL + band * i + (band - barW) / 2, base = padT + plotH;
+        if (!d.future && v > 0) {
+          const hgt = Math.max(2, (v / max) * plotH), top = base - hgt, r = Math.min(4, barW / 2, hgt);
+          chart.append(svgEl('path', {
+            d: `M${x} ${base} V${top + r} Q${x} ${top} ${x + r} ${top} H${x + barW - r} Q${x + barW} ${top} ${x + barW} ${top + r} V${base} Z`,
+            fill: RP.blue,
+          }));
+        }
+        if (!d.future) {
+          chart.append(svgEl('rect', {
+            x: padL + band * i, y: padT, width: band, height: plotH, fill: 'transparent', tabindex: 0,
+            'data-tip': `${fmtDay(d.t)}${d.today ? ' (today)' : ''} · ${fmt(v)}`,
+          }));
+        }
+      });
+      chart.append(svgEl('line', { x1: padL, x2: W - padR, y1: padT + plotH, y2: padT + plotH, class: 'rp-axis' }));
+      const xLabel = (i, text, anchor) => {
+        const t = svgEl('text', { x: anchor === 'start' ? padL : anchor === 'end' ? W - padR : padL + band * i + band / 2, y: H - 6, class: 'rp-tick', 'text-anchor': anchor });
+        t.textContent = text;
+        chart.append(t);
+      };
+      if (days.length) {
+        xLabel(0, fmtDay(days[0].t), 'start');
+        xLabel(days.length - 1, fmtDay(days[days.length - 1].t), 'end');
+        const ti = days.findIndex((d) => d.today);
+        if (ti > days.length * 0.12 && ti < days.length * 0.88) xLabel(ti, 'Today', 'middle');
+      }
+      return chart;
+    }
+
+    // Horizontal bars with the value at the tip; one color per chart unless an ordinal ramp is given.
+    function barList(rows, { colors, fmt = String } = {}) {
+      const max = Math.max(1, ...rows.map((r) => r[1]));
+      const wrap = h('div', 'rp-bars');
+      rows.forEach(([label, value, note], i) => {
+        const text = fmt(value) + (note ? ` · ${note}` : '');
+        const row = h('div', 'rp-bar-row');
+        row.tabIndex = 0;
+        row.dataset.tip = `${label} · ${text}`;
+        const track = h('div', 'rp-track');
+        const fill = h('i');
+        fill.style.width = value > 0 ? `max(2px, calc((100% - 150px) * ${value / max}))` : '0';
+        fill.style.background = colors ? colors[i % colors.length] : RP.blue;
+        track.append(fill, h('span', 'rp-bar-value', text));
+        row.append(h('span', 'rp-bar-label', label), track);
+        wrap.append(row);
+      });
+      return wrap;
+    }
+
+    // Numbers align right; text columns (the first by default) align left.
+    function reportTable(headers, rows, textColumns = [0]) {
+      const table = h('table', 'rp-table');
+      const align = (cell, i) => { if (textColumns.includes(i)) cell.style.textAlign = 'left'; return cell; };
+      const head = h('tr');
+      headers.forEach((x, i) => head.append(align(h('th', '', x), i)));
+      table.append(head);
+      for (const cells of rows) {
+        const tr = h('tr');
+        cells.forEach((c, i) => tr.append(align(h('td', '', c), i)));
+        table.append(tr);
+      }
+      return table;
+    }
+
+    function renderReport() {
+      if (!reportOpen()) return;
+      const body = $('reportBody');
+      const d = reportData(), m = d.model;
+      body.replaceChildren();
+      const section = (title, sub) => {
+        const s = h('section', 'rp-section');
+        s.append(h('h2', '', title));
+        if (sub) s.append(h('p', 'rp-sub', sub));
+        body.append(s);
+        return s;
+      };
+      const empty = (s, text) => s.append(h('p', 'rp-empty', text));
+      const n = d.imps.length;
+
+      const head = h('header', 'rp-section rp-head');
+      if (card.photo) head.append(Object.assign(h('img', 'rp-thumb'), { src: card.photo, alt: 'Registered photo' }));
+      const headText = h('div');
+      const meta = [];
+      if (schedule) meta.push(`${fmtDay(parseDay(schedule.start).getTime(), true)} – ${fmtDay(parseDay(schedule.end).getTime(), true)}`, campaignStatus());
+      meta.push(`Generated ${new Date().toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`);
+      headText.append(h('div', 'rp-kicker', 'Campaign report'), h('h1', '', card.title && card.title !== 'Untitled' ? card.title : 'Context card campaign'), h('p', 'rp-meta', meta.join(' · ')));
+      head.append(headText);
+      body.append(head);
+
+      const results = section('Results', m.updated ? `${plural(n, 'impression')} and ${plural(d.buys.length, 'purchase')} · last activity ${timeLabel(m.updated)}` : 'No scans yet');
+      const hero = h('div', 'rp-hero');
+      hero.append(h('span', '', 'Revenue'), h('b', '', fmtMoney(d.revenue)));
+      if (m.pace && n) hero.append(h('small', '', m.pace.line));
+      const tiles = h('div', 'rp-tiles');
+      [['Reach', m.kpis[0][1]], ['Impressions', m.kpis[1][1]], ['Hook rate', m.kpis[2][1]], ['Avg watch', m.kpis[3][1]],
+        ['Engagement rate', pct(rate(d.funnel[2][1], n))], ['Purchase rate', pct(rate(d.funnel[3][1], n))]]
+        .forEach(([label, value]) => { const t = h('div', 'rp-tile'); t.append(h('span', '', label), h('b', '', value)); tiles.append(t); });
+      results.append(hero, tiles);
+
+      const funnel = section('Conversion funnel', 'How many impressions reach each stage');
+      if (n) funnel.append(barList(d.funnel.map(([label, v], i) => [label, v, i ? `${pct(rate(v, n))}` : '']), { colors: RP.ordinal }));
+      else empty(funnel, 'No impressions yet');
+
+      const daily = section('Daily activity', schedule ? 'Across the campaign schedule' : 'Days with activity');
+      if (d.days.length && n) {
+        const width = daily.clientWidth - 40;
+        daily.append(h('h3', 'rp-h3', 'Impressions per day'), columnChart(d.days, 'imps', (v) => String(Math.round(v)), 'Impressions per day', width));
+        const dollars = (cents) => (cents % 100 ? fmtMoney(Math.round(cents)) : `$${(cents / 100).toLocaleString()}`);
+        daily.append(h('h3', 'rp-h3', 'Revenue per day'), columnChart(d.days, 'revenue', dollars, 'Revenue per day', width));
+        const details = h('details');
+        details.append(h('summary', '', 'Table view'),
+          reportTable(['Day', 'Impressions', 'Revenue'], d.days.filter((x) => !x.future && (x.imps || x.revenue)).map((x) => [fmtDay(x.t, true), String(x.imps), fmtMoney(x.revenue)])));
+        daily.append(details);
+      } else {
+        empty(daily, 'No activity yet');
+      }
+
+      const exps = section('Experiences', 'Each experience shown in the camera');
+      if (m.experiences.length) {
+        exps.append(reportTable(['Experience', 'Seen', 'Hook', 'Buys', 'Revenue'], m.experiences));
+        if (d.revenue) exps.append(h('h3', 'rp-h3', 'Revenue by experience'), barList(d.revenueByExp, { fmt: fmtMoney }));
+      } else {
+        empty(exps, 'No impressions yet');
+      }
+
+      const locs = section('Locations', "Where impressions happened, from the phone's location");
+      if (m.locations.length) locs.append(barList(m.locations.map(([name, share]) => [name, Math.round(share * n), pct(share)]), { fmt: (v) => plural(v, 'impression') }));
+      else empty(locs, 'No impressions yet');
+
+      const engagement = section('Engagement', 'Actions taken in the camera');
+      if (d.mix.some(([, v]) => v)) engagement.append(barList(d.mix));
+      else empty(engagement, 'No actions yet');
+
+      const pay = section('Payouts · owed', 'How purchase revenue splits across the ledger (demo purchases, no funds moved)');
+      const paid = d.segs.filter((x) => x.cents > 0);
+      if (d.buys.length && paid.length) {
+        const total = d.segs.reduce((sum, x) => sum + x.cents, 0) || 1;
+        const stack = h('div', 'rp-stack');
+        stack.setAttribute('role', 'img');
+        stack.setAttribute('aria-label', paid.map((x) => `${x.name} ${fmtMoney(x.cents)}`).join(', '));
+        for (const x of paid) {
+          const seg = h('i');
+          seg.style.flex = `${x.cents} 1 0`;
+          seg.style.background = x.color;
+          seg.tabIndex = 0;
+          seg.dataset.tip = `${x.name} · ${fmtMoney(x.cents)} · ${pct(x.cents / total)}`;
+          stack.append(seg);
+        }
+        const legend = h('div', 'rp-legend');
+        for (const x of d.segs) {
+          const name = h('span', 'rp-legend-name');
+          const swatch = h('i');
+          swatch.style.background = x.color;
+          name.append(swatch, document.createTextNode(x.name));
+          legend.append(name, h('span', 'rp-num', fmtMoney(x.cents)), h('span', 'rp-num muted', pct(x.cents / total)));
+        }
+        pay.append(stack, legend);
+      } else {
+        empty(pay, 'No purchases yet');
+      }
+
+      const recent = section('Recent activity', 'Latest 15 events');
+      if (m.recent.length) recent.append(reportTable(['Time', 'Event'], m.recent, [0, 1]));
+      else empty(recent, 'No activity yet');
+
+      body.append(h('p', 'rp-foot', `Built from ${plural(Object.keys(events).length, 'event')} · purchases are demo only`));
+    }
+
+    // One tooltip for every chart mark; keyboard focus shows the same text as hover.
+    function showTip(target, x, y) {
+      const tip = $('rpTip');
+      const text = target?.getAttribute?.('data-tip');
+      if (!text) { tip.hidden = true; return; }
+      tip.textContent = text;
+      tip.hidden = false;
+      const r = tip.getBoundingClientRect();
+      tip.style.left = `${Math.min(innerWidth - r.width - 8, Math.max(8, x - r.width / 2))}px`;
+      tip.style.top = `${Math.max(8, y - r.height - 12)}px`;
+    }
+    $('reportBody').addEventListener('pointermove', (e) => showTip(e.target.closest('[data-tip]'), e.clientX, e.clientY));
+    $('reportBody').addEventListener('pointerleave', () => { $('rpTip').hidden = true; });
+    $('reportBody').addEventListener('focusin', (e) => {
+      const target = e.target.closest('[data-tip]');
+      if (!target) return;
+      const r = target.getBoundingClientRect();
+      showTip(target, r.left + r.width / 2, r.top);
+    });
+    $('reportBody').addEventListener('focusout', () => { $('rpTip').hidden = true; });
+    $('report').addEventListener('scroll', () => { $('rpTip').hidden = true; });
+
+    $('reportClose').onclick = closeReport;
+    $('reportPrint').onclick = () => window.print();
+    $('reportCopy').onclick = async () => {
+      try { await navigator.clipboard.writeText(location.href); $('reportCopy').textContent = 'Link copied'; }
+      catch { $('reportCopy').textContent = 'Copy failed'; }
+      setTimeout(() => { $('reportCopy').textContent = 'Copy link'; }, 1600);
+    };
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && reportOpen() && !$('drawer').classList.contains('open')) closeReport(); });
+    addEventListener('resize', scheduleReport);
+
+    /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
     // Firebase web config (public by design; access is governed by database rules). Set to null to run on this device only.
     const FIREBASE_CONFIG = {
       apiKey: 'AIzaSyDNDSi6Ep3TDbELk5VHtya1p8jbCDMFW98',
@@ -1925,7 +2345,7 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
@@ -1937,6 +2357,7 @@
     fit();
     document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
     startSync();
+    if (new URLSearchParams(location.search).get('view') === 'report') openReport();
   </script>
 </body>
 </html>
