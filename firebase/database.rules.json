@@ -1,5 +1,12 @@
 {
   "rules": {
+    "campaigns": {
+      ".read": "auth != null",
+      "$room": {
+        ".write": "auth != null && ((auth.token.email === 'OWNER_EMAIL' && auth.token.email_verified === true) || $room.beginsWith('test-'))",
+        ".validate": "newData.hasChildren(['name', 'createdAt']) && newData.child('name').isString() && newData.child('name').val().length <= 60 && newData.child('createdAt').isNumber()"
+      }
+    },
     "demos": {
       "$room": {
         ".write": "auth != null && ((auth.token.email === 'OWNER_EMAIL' && auth.token.email_verified === true) || $room.beginsWith('test-'))",
