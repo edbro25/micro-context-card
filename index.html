@@ -56,6 +56,16 @@
     @media (max-width: 640px) { .brand { display: none; } }
     .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px;
       padding: 8px 14px; font-size: 13px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    /* Campaign switcher: a quiet pill under the brand; each campaign is its own room. */
+    .topbar-left { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+    .campaign { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; max-width: min(260px, 48vw); cursor: pointer; }
+    .campaign:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .campaign span { color: var(--muted); font-size: 12px; flex: none; }
+    .campaign select { appearance: none; -webkit-appearance: none; border: 0; margin: 0; padding: 0 14px 0 0; min-width: 0; max-width: 100%;
+      font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); text-overflow: ellipsis; cursor: pointer; outline: none;
+      background: linear-gradient(45deg, transparent 50%, var(--muted) 50%) calc(100% - 4px) 55% / 4px 4px no-repeat,
+                  linear-gradient(135deg, var(--muted) 50%, transparent 50%) 100% 55% / 4px 4px no-repeat; }
+    @media (pointer: coarse) { .campaign select { font-size: 16px; } }   /* iOS zooms into smaller pickers */
 
     /* ---------- Root context card ---------- */
     .card { position: absolute; width: 260px; transform: translate(-50%, -50%);
@@ -419,9 +429,12 @@
   </div>
 
   <div class="topbar">
-    <div class="actions">
-      <span class="pill brand">Context Canvas</span>
-      <span class="pill sync" id="syncPill" hidden><i></i><span id="syncText">Connecting…</span></span>
+    <div class="topbar-left">
+      <div class="actions">
+        <span class="pill brand">Context Canvas</span>
+        <span class="pill sync" id="syncPill" hidden><i></i><span id="syncText">Connecting…</span></span>
+      </div>
+      <label class="pill campaign" id="campaignPill" hidden><span>Campaign</span><select id="campaignSelect" aria-label="Campaign"></select></label>
     </div>
     <div class="actions">
       <div class="city-toggle" role="group" aria-label="Demo city"><button type="button" data-city="nyc">NYC</button><button type="button" data-city="la">LA</button></div>
@@ -530,8 +543,12 @@
 
   <script type="module">
     const MINDAR_URL = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
-    const STORE_KEY = 'contextCanvas.card.v1';
-    const METRICS_KEY = 'contextCanvas.metrics.v1';
+    // Each campaign is its own room (?room=…); the original campaign is "default".
+    const ROOM = (new URLSearchParams(location.search).get('room') || 'default').replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'default';
+    // Saved copies are kept per campaign, so switching never flashes another campaign's card.
+    const roomKey = (key) => ROOM === 'default' ? key : `${key}.${ROOM}`;
+    const STORE_KEY = roomKey('contextCanvas.card.v1');
+    const METRICS_KEY = roomKey('contextCanvas.metrics.v1');
     const $ = (id) => document.getElementById(id);
 
     // Proxy thresholds
@@ -858,6 +875,8 @@
       card.title = $('title').textContent.trim() || 'Untitled';
       save();
       put('title', { value: card.title, by: clientId });
+      renderCampaigns();
+      syncCampaignIndex();
     });
     $('title').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
     $('photo').addEventListener('click', () => { if (!moved && isOwner) $('fileInput').click(); });
@@ -1186,7 +1205,7 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden && stream) closeScanner(); });
 
     /* ---------------- Schedule: overall campaign dates ---------------- */
-    const SCHED_KEY = 'contextCanvas.schedule.v1';
+    const SCHED_KEY = roomKey('contextCanvas.schedule.v1');
     const DAY_MS = 86400000;
     let schedule = (({ start, end }) => (start && end ? { start, end } : null))(loadJSON(SCHED_KEY));
     let schedEditing = false;
@@ -1266,7 +1285,7 @@
 
     /* ---------------- Ledger: stakeholder allocation (SPAT fixed at 3%) ---------------- */
     // Stored in basis points so percentages add up exactly (10000 bps = 100%).
-    const LEDGER_KEY = 'contextCanvas.ledger.v1';
+    const LEDGER_KEY = roomKey('contextCanvas.ledger.v1');
     const PLATFORM_NAME = 'SPAT', PLATFORM_BPS = 300, STAKEHOLDER_BPS = 10000 - PLATFORM_BPS;
     let stakeholders = loadJSON(LEDGER_KEY);
     let ledgerAdding = false;
@@ -1376,7 +1395,7 @@
     }
 
     /* ---------------- Experiences: HTML shown in the camera, by location and time ---------------- */
-    const EXP_KEY = 'contextCanvas.experiences.v1';
+    const EXP_KEY = roomKey('contextCanvas.experiences.v1');
     const MAX_HTML_BYTES = 300 * 1024;
     let experiences = loadJSON(EXP_KEY);
     const expanded = new Set();
@@ -1774,7 +1793,7 @@
 
     /* ---------------- Event log: time-stamped impressions and actions ---------------- */
     // The raw record behind the dashboard: every impression and action, with time, experience, location and device.
-    const EVENTS_KEY = 'contextCanvas.events.v1', MAX_LOCAL_EVENTS = 1000;
+    const EVENTS_KEY = roomKey('contextCanvas.events.v1'), MAX_LOCAL_EVENTS = 1000;
     const deviceId = (() => {
       try {
         let id = localStorage.getItem('contextCanvas.device');
@@ -2806,7 +2825,6 @@
       appId: '1:974150159084:web:5c25ab182da8dc2bedb3c9',
     };
     const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
-    const ROOM = (new URLSearchParams(location.search).get('room') || 'default').replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'default';
     const clientId = Math.random().toString(36).slice(2, 10);
     const sync = { on: false, api: null, db: null, connected: false };
     // Auth: everyone gets a quiet anonymous session (enough to scan and view); the owner signs in with Google to edit.
@@ -2883,10 +2901,13 @@
     }
 
     function applyTitle(v) {
+      titleLoaded = true;
       if (v?.by === clientId) return;
       card.title = v?.value || 'Untitled';
       save();
       if (document.activeElement !== $('title')) $('title').textContent = card.title;
+      renderCampaigns();
+      syncCampaignIndex();
     }
     function applyPhoto(v) {
       if (!v) { if (card.photo) wipeLocal(); return; }   // demo was reset
@@ -2947,6 +2968,7 @@
         listen('schedule', applySchedule);
         listen('ledger', applyLedger);
         listen('events', applyEvents);
+        listenCampaigns();
         if (isOwner) listenPeople();
         recordReferral();
         updateSyncPill();
@@ -2991,6 +3013,8 @@
       btn.classList.toggle('owner', owner && signedIn);
       btn.textContent = signedIn ? (owner ? 'Owner · Sign out' : 'View only · Sign out') : 'Sign in';
       btn.title = signedIn ? `Signed in as ${user.email || 'Google account'}` : 'Sign in with Google to edit';
+      renderCampaigns();
+      syncCampaignIndex();
     }
 
     $('ownerBtn').onclick = async () => {
@@ -3008,8 +3032,69 @@
       }
     };
 
+    /* ---------------- Campaigns ---------------- */
+    // A shared index (campaigns/<room>) lists every campaign; each name follows that campaign's card title.
+    let campaigns = null, titleLoaded = false;
+    const campaignName = (id) => campaigns?.[id]?.name
+      || (id === ROOM && card.title !== 'Untitled' ? card.title : id === 'default' ? 'Main campaign' : id);
+
+    function renderCampaigns() {
+      const sel = $('campaignSelect');
+      $('campaignPill').hidden = !FIREBASE_CONFIG;
+      const testMode = ROOM.startsWith('test-');   // test rooms only list each other, and never appear in the live list
+      const ids = Object.keys(campaigns || {}).filter((id) => id.startsWith('test-') === testMode);
+      if (!ids.includes(ROOM)) ids.push(ROOM);
+      ids.sort((a, b) => (campaigns?.[a]?.createdAt || 0) - (campaigns?.[b]?.createdAt || 0));
+      sel.replaceChildren(...ids.map((id) => new Option(campaignName(id), id)));
+      if (isOwner && sync.on) sel.add(new Option('+ New campaign', '__new'));
+      sel.value = ROOM;
+    }
+
+    // The owner keeps the index in step: registers this campaign and follows title renames.
+    function syncCampaignIndex() {
+      if (!sync.on || !isOwner || !campaigns || !titleLoaded) return;
+      const entry = campaigns[ROOM];
+      const name = card.title !== 'Untitled' ? card.title.slice(0, 60) : entry?.name || campaignName(ROOM);
+      if (entry?.name === name) return;
+      sync.api.set(sync.api.ref(sync.db, `campaigns/${ROOM}`), { name, createdAt: entry?.createdAt || Date.now() })
+        .catch((err) => console.warn('[campaigns]', err?.code || err));
+    }
+
+    function listenCampaigns() {
+      sync.api.onValue(sync.api.ref(sync.db, 'campaigns'),
+        (snap) => { campaigns = snap.val() || {}; renderCampaigns(); syncCampaignIndex(); },
+        (err) => { console.warn('[campaigns] no read access', err?.code || err); renderCampaigns(); });
+    }
+
+    function campaignUrl(id) {
+      const url = new URL(location.pathname, location.origin);
+      if (id !== 'default') url.searchParams.set('room', id);
+      return url.href;
+    }
+
+    async function newCampaign() {
+      const name = (prompt('Name the new campaign') || '').trim().slice(0, 60);
+      if (!name) return;
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'campaign';
+      const id = `${ROOM.startsWith('test-') ? 'test-' : ''}${slug}-${Math.random().toString(36).slice(2, 6)}`;
+      try {
+        await sync.api.set(sync.api.ref(sync.db, `campaigns/${id}`), { name, createdAt: Date.now() });
+        await sync.api.set(sync.api.ref(sync.db, `demos/${id}/title`), { value: name, by: clientId });
+        location.href = campaignUrl(id);
+      } catch (err) {
+        console.error('[campaigns]', err);
+        alert('Couldn’t create the campaign. Check that the database rules include "campaigns".');
+      }
+    }
+
+    $('campaignSelect').addEventListener('change', (e) => {
+      const id = e.target.value;
+      if (id === '__new') { e.target.value = ROOM; newCampaign(); return; }
+      if (id !== ROOM) location.href = campaignUrl(id);
+    });
+
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, graphFilter, shareUrl, openShare, getPeople: () => people, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, graphFilter, shareUrl, openShare, getPeople: () => people, applyRole, getCampaigns: () => campaigns, renderCampaigns, campaignUrl, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
 
     buildTree();
     renderCard();
@@ -3018,6 +3103,7 @@
     renderSchedule();
     renderLedger();
     applyDemoCity();
+    renderCampaigns();
     layout();
     fit();
     document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
