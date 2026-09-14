@@ -362,14 +362,15 @@
     .rp-tip { position: fixed; z-index: 45; pointer-events: none; background: #0b0b0b; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
 
     /* ---------- Identity sheet (opt-in receipt after a purchase) ---------- */
-    #identifySheet { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5; max-width: 460px; margin: 0 auto;
+    #identifySheet, #shareSheet { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5; max-width: 460px; margin: 0 auto;
       display: grid; gap: 8px; padding: 16px; border-radius: 16px; background: var(--card); color: var(--ink); box-shadow: 0 12px 36px rgba(0,0,0,.4); animation: sheetIn .25s ease-out; }
-    #identifySheet b { font-size: 16px; }
-    #identifySheet .sheet-sub, #identifySheet small { margin: 0; font-size: 12px; color: var(--muted); }
+    #identifySheet b, #shareSheet b { font-size: 16px; }
+    #identifySheet .sheet-sub, #identifySheet small, #shareSheet .sheet-sub { margin: 0; font-size: 12px; color: var(--muted); }
     #identifySheet input[type=email], #identifySheet input[type=tel] { font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
     #identifySheet label { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
     #identifySheet label input { margin-top: 2px; }
     .sheet-actions { display: flex; align-items: center; gap: 14px; }
+    #shareSheet input { font: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: #fafaf8; }
     .sheet-actions .skip { background: none; color: var(--muted); padding: 8px 0; }
     .sheet-error { min-height: 1em; font-size: 12px; color: #c0392b; }
     .scan-toast { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top)); translate: -50% 0; z-index: 6; padding: 8px 14px; border-radius: 999px;
@@ -494,6 +495,12 @@
       <div class="sheet-actions"><button class="btn" type="submit">Send receipt</button><button class="skip" type="button" id="idSkip">No thanks</button></div>
       <small>Used only for this receipt and any offers you opt into. The organizer can delete it anytime.</small>
     </form>
+    <div id="shareSheet" hidden>
+      <b>Share this experience</b>
+      <p class="sheet-sub">Friends who open your link are connected to you in the Graph.</p>
+      <input id="shareUrl" readonly aria-label="Your share link">
+      <div class="sheet-actions"><button class="btn" type="button" id="shareCopy">Copy link</button><button class="skip" type="button" id="shareDone">Done</button></div>
+    </div>
     <div class="scan-toast" id="scanToast" hidden></div>
     <form id="commentBar" hidden>
       <input id="commentInput" placeholder="Add a comment…" autocomplete="off" enterkeyhint="send">
@@ -1049,12 +1056,13 @@
         $('commentInput').focus();
         return;
       }
+      if (type === 'share') openShare();   // every tap can share; the count stays once per impression
       if (imp.actions[type]) return;      // one of each per impression, like the real apps
       imp.actions[type] = true;
       actionButtons().filter((b) => b.dataset.act === type).forEach((b) => b.classList.add('active'));
       metrics[ACTION_KEYS[type]]++;
       markEngaged(imp, type);
-      logAction(type);
+      logAction(type, type === 'share' ? { ref: deviceId } : {});
       saveMetrics();
       renderMetrics();
     }
@@ -1977,6 +1985,7 @@
         if (e.type === 'purchase') what = `Purchase ${fmtMoney(e.amountCents || 0)}`;
         if (e.type === 'comment') what = `Comment “${e.text || ''}”`;
         if (e.type === 'object') what = `Tapped ${e.title || 'object'}`;
+        if (e.type === 'referral') what = 'Opened a shared link';
         const title = e.exp ? experiences[e.exp]?.title : '';
         return [timeLabel(e.t), title ? `${what} · ${title}` : what];
       });
@@ -2492,6 +2501,54 @@
       if (Object.keys(people).length) { people = {}; peopleVersion++; renderGraph(); }
     }
 
+    /* ---------------- Referrals: share links that connect people ---------------- */
+    // A share link carries the sharer's anonymous device code (?ref=). The first link a phone opens is remembered
+    // and logged once as a 'referral' event, which the Graph uses to connect the two people.
+    const REF_KEY = 'contextCanvas.referredBy';
+
+    function shareUrl() {
+      const url = new URL(location.origin + location.pathname);
+      if (ROOM !== 'default') url.searchParams.set('room', ROOM);
+      url.searchParams.set('ref', deviceId);
+      return url.toString();
+    }
+
+    async function openShare() {
+      const url = shareUrl();
+      const title = currentExp?.title || card.title || 'Context Card';
+      try {
+        if (navigator.share) { await navigator.share({ title, text: `Scan this with me — ${title}`, url }); showToast('Thanks for sharing'); return; }
+      } catch (err) {
+        if (err?.name === 'AbortError') return;   // the person closed the share sheet
+      }
+      $('shareUrl').value = url;
+      $('shareCopy').textContent = 'Copy link';
+      $('shareSheet').hidden = false;
+    }
+    $('shareDone').onclick = () => { $('shareSheet').hidden = true; };
+    $('shareCopy').onclick = async () => {
+      try { await navigator.clipboard.writeText($('shareUrl').value); $('shareCopy').textContent = 'Copied'; }
+      catch { $('shareUrl').select(); $('shareCopy').textContent = 'Press ⌘C / long-press to copy'; }
+    };
+
+    function captureReferral() {
+      const params = new URLSearchParams(location.search);
+      if (!params.has('ref')) return;
+      const ref = (params.get('ref') || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
+      params.delete('ref');
+      history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);   // don't pass someone else's code on
+      if (!ref || ref === deviceId) return;
+      try { if (!localStorage.getItem(REF_KEY)) localStorage.setItem(REF_KEY, JSON.stringify({ ref, at: Date.now(), logged: false })); } catch {}
+    }
+
+    function recordReferral() {
+      let referral = null;
+      try { referral = JSON.parse(localStorage.getItem(REF_KEY)); } catch {}
+      if (!referral || referral.logged) return;
+      writeEvent(newEventId(), { type: 'referral', t: referral.at, device: deviceId, ref: referral.ref });
+      try { localStorage.setItem(REF_KEY, JSON.stringify({ ...referral, logged: true })); } catch {}
+    }
+
     /* ---------------- Graph: anonymous consumers (one per scanning device) ---------------- */
     // Built from the synced event log. Identity (email/phone) joins these rows in a later stage.
     const graphExpanded = new Set();
@@ -2514,6 +2571,7 @@
       const expOf = (c, key) => c.exps.get(key) || c.exps.set(key, { id: key, seen: 0, buys: 0, cents: 0, objects: new Set() }).get(key);
       const byDevice = new Map();
       const identified = new Set();
+      const referredBy = new Map();   // device → device that referred it
       for (const e of Object.values(events)) {
         if (!e.device) continue;
         if (e.type === 'identify') { identified.add(e.device); continue; }
@@ -2532,6 +2590,8 @@
         } else if (e.type === 'object') {
           c.objects.set(e.title || 'Object', (c.objects.get(e.title || 'Object') || 0) + 1);
           ex.objects.add(e.title || 'Object');
+        } else if (e.type === 'referral') {
+          if (e.ref && e.ref !== e.device && !referredBy.has(e.device)) referredBy.set(e.device, e.ref);
         } else {
           c.actions[e.type] = (c.actions[e.type] || 0) + 1;
         }
@@ -2553,7 +2613,7 @@
         into.devices.push(...c.devices);
       }
 
-      return [...groups].map(([key, c]) => {
+      const rows = [...groups].map(([key, c]) => {
         const taps = [...c.objects.values()].reduce((n, v) => n + v, 0);
         const actionCount = Object.values(c.actions).reduce((n, v) => n + v, 0);
         // Merged devices: the most recently updated record has the freshest mobile / consent.
@@ -2568,7 +2628,21 @@
           topPlace: [...c.places].sort((a, b) => b[1] - a[1])[0]?.[0] || 'No location',
           seenExps: [...c.exps.values()].filter((x) => x.id && (x.seen || x.buys || x.objects.size)),
         };
-      }).sort((a, b) => TIER_RANK[a.tier] - TIER_RANK[b.tier] || b.spend - a.spend || b.scans - a.scans || b.last - a.last);
+      });
+
+      // Referral edges between people (a merged person counts once).
+      const keyOfDevice = new Map(rows.flatMap((r) => r.devices.map((d) => [d, r.key])));
+      const rowByKey = new Map(rows.map((r) => [r.key, r]));
+      const labelOfDevice = (d) => rowByKey.get(keyOfDevice.get(d))?.label || '·' + d.slice(-4).toUpperCase();
+      for (const r of rows) {
+        const referrer = r.devices.map((d) => referredBy.get(d)).find((ref) => ref && keyOfDevice.get(ref) !== r.key) || null;
+        r.referredByLabel = referrer ? labelOfDevice(referrer) : null;
+        const broughtKeys = new Set([...referredBy].filter(([d, ref]) => r.devices.includes(ref) && keyOfDevice.get(d) !== r.key).map(([d]) => keyOfDevice.get(d) || d));
+        r.referred = [...broughtKeys].map((k) => rowByKey.get(k)).filter(Boolean);
+        r.referredCount = r.referred.length;
+        r.referralRevenue = r.referred.reduce((n, x) => n + x.spend, 0);
+      }
+      return rows.sort((a, b) => TIER_RANK[a.tier] - TIER_RANK[b.tier] || b.spend - a.spend || b.scans - a.scans || b.last - a.last);
     }
 
     function renderGraph() {
@@ -2584,7 +2658,8 @@
       const head = el('div', 'graph-head');
       const identifiedCount = consumers.reduce((n, c) => n + c.identifiedDevices, 0);   // same count for owner and viewers
       const deviceCount = consumers.reduce((n, c) => n + c.devices.length, 0);
-      head.append(el('span', '', consumers.length ? `Consumers · ${plural(deviceCount, 'device')}${identifiedCount ? ` · ${identifiedCount} identified` : ''}` : 'Consumers'));
+      const referredTotal = consumers.filter((c) => c.referredByLabel).length;
+      head.append(el('span', '', consumers.length ? `Consumers · ${plural(deviceCount, 'device')}${identifiedCount ? ` · ${identifiedCount} identified` : ''}${referredTotal ? ` · ${referredTotal} referred` : ''}` : 'Consumers'));
       const legend = el('span', 'graph-legend');
       for (const [id, name] of Object.entries(TIERS)) { const item = el('span'); item.append(el('i', `tier ${id}`), document.createTextNode(name)); legend.append(item); }
       head.append(legend);
@@ -2599,7 +2674,7 @@
         row.type = 'button';
         row.setAttribute('aria-expanded', String(graphExpanded.has(c.key)));
         row.onclick = () => { graphExpanded.has(c.key) ? graphExpanded.delete(c.key) : graphExpanded.add(c.key); renderGraph(); layout(); };
-        const meta = [c.topPlace, plural(c.scans, 'scan'), c.taps ? plural(c.taps, 'tap') : '', c.devices.length > 1 ? plural(c.devices.length, 'device') : ''].filter(Boolean).join(' · ');
+        const meta = [c.scans ? c.topPlace : 'Opened a shared link', c.scans ? plural(c.scans, 'scan') : '', c.taps ? plural(c.taps, 'tap') : '', c.devices.length > 1 ? plural(c.devices.length, 'device') : '', c.referredCount ? `↗ ${c.referredCount} referred` : ''].filter(Boolean).join(' · ');
         const id = el('span', 'consumer-id', c.label + (c.devices.includes(deviceId) ? ' (you)' : ''));
         if (c.identified && !c.person) id.append(el('span', 'id-badge', '✉'));
         row.append(el('i', `tier ${c.tier}`), id, el('span', 'consumer-meta', meta), el('span', 'consumer-spend', c.spend ? fmtMoney(c.spend) : '—'));
@@ -2624,6 +2699,11 @@
         fact('Identity', 'Shared an email');
       }
       if (c.devices.length > 1) fact('Devices', c.deviceLabels.join(', '));
+      if (c.referredByLabel) fact('Referred by', c.referredByLabel, true);
+      if (c.referredCount) {
+        fact('Brought in', c.referred.map((x) => x.label).join(', '), true);
+        fact('Referral revenue', fmtMoney(c.referralRevenue));
+      }
       fact('First seen', timeLabel(c.first));
       fact('Last seen', timeLabel(c.last));
       fact('Places', [...c.places.keys()].join(', ') || '—');
@@ -2819,6 +2899,7 @@
         listen('ledger', applyLedger);
         listen('events', applyEvents);
         if (isOwner) listenPeople();
+        recordReferral();
         updateSyncPill();
       } catch (err) {
         console.error('[sync]', err);
@@ -2879,7 +2960,7 @@
     };
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, getPeople: () => people, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, shareUrl, openShare, getPeople: () => people, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
 
     buildTree();
     renderCard();
@@ -2891,6 +2972,7 @@
     layout();
     fit();
     document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
+    captureReferral();
     startSync();
     if (new URLSearchParams(location.search).get('view') === 'report') openReport();
   </script>
