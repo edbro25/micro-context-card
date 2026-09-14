@@ -77,6 +77,52 @@
     .stat b { font-weight: 560; color: var(--ink); font-variant-numeric: tabular-nums; transition: color .8s; }
     .stat.pulse b { color: var(--accent); transition: none; }
 
+    /* ---------- Experiences spoke (right of the card) ---------- */
+    .exp-list { position: absolute; width: 250px; font-size: 12.5px; }
+    .exp-head { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+    .exp-play { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid #cfcfc7; background: transparent;
+      display: grid; place-items: center; font-size: 8px; color: var(--ink); flex: none; }
+    .exp-play.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+    .exp-title { flex: 1; min-width: 0; text-align: left; background: none; padding: 2px 0; font-size: 12.5px; color: var(--ink);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .exp-title.paused { color: var(--muted); }
+    .exp-now { font-size: 10.5px; color: var(--ok); white-space: nowrap; }
+    .exp-details { margin: 2px 0 10px 30px; font-size: 11.5px; line-height: 1.55; }
+    .exp-details dt { float: left; width: 46px; color: #a3a39b; }
+    .exp-details dd { margin: 0 0 0 46px; color: var(--ink); white-space: pre-line; }
+    .exp-preview { margin: 6px 0 2px; width: 200px; height: 120px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #fff; }
+    .exp-preview iframe { width: 400px; height: 240px; border: 0; transform: scale(.5); transform-origin: 0 0; pointer-events: none; }
+    .exp-link { background: none; padding: 4px 0; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+    .exp-empty { color: #a3a39b; font-size: 12px; padding: 2px 0 4px; }
+
+    /* ---------- Add-experience drawer (sidebar on desktop, pop-out on mobile) ---------- */
+    #drawerScrim { position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,.18); }
+    #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 92vw); z-index: 30; background: var(--card);
+      border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(0,0,0,.08); display: flex; flex-direction: column;
+      transform: translateX(105%); transition: transform .28s ease; visibility: hidden; }
+    #drawer.open { transform: none; visibility: visible; }
+    .drawer-head { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: calc(12px + env(safe-area-inset-top)) 16px 10px; border-bottom: 1px solid var(--line); }
+    .drawer-head b { font-size: 15px; }
+    .drawer-body { margin: 0; padding: 14px 16px calc(24px + env(safe-area-inset-bottom)); overflow-y: auto; display: grid; gap: 14px; align-content: start; }
+    .drop { border: 1.5px dashed #cfcfc7; border-radius: 10px; padding: 20px 12px; text-align: center; color: var(--muted);
+      font-size: 13px; cursor: pointer; background: #fafaf8; }
+    .drop.over { border-color: var(--accent); background: rgba(47,109,246,.05); color: var(--accent); }
+    .drop.has-file { padding: 8px; text-align: left; }
+    .drop small { font-size: 12px; }
+    .drop .file-name { font-size: 12px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .drop iframe { display: block; width: 100%; height: 150px; margin-top: 6px; border: 0; border-radius: 6px; background: #fff; pointer-events: none; }
+    .field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+    .field input { font: inherit; font-size: 16px; color: var(--ink); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+      background: #fff; width: 100%; min-width: 0; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .drawer-body fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+    .drawer-body legend { font-size: 13px; color: var(--ink); padding: 0 4px; }
+    .drawer-body legend label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .drawer-body fieldset:not(.on) > :not(legend) { display: none; }
+    .form-error { color: #c0392b; font-size: 12px; min-height: 1em; }
+    .drawer-body .btn { justify-self: start; }
+
     /* ---------- Viewfinder ---------- */
     #scanner { position: fixed; inset: 0; z-index: 20; background: #000; overflow: hidden; touch-action: manipulation; }
     #scanner video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -111,6 +157,14 @@
     .heart { position: absolute; font-size: 72px; transform: translate(-50%, -50%); pointer-events: none; animation: pop .8s ease-out forwards; }
     @keyframes pop { 0% { transform: translate(-50%,-50%) scale(.4); opacity: 0; } 25% { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
       100% { transform: translate(-50%,-90%) scale(1); opacity: 0; } }
+
+    #expOverlay { position: absolute; left: 12px; right: 64px; top: calc(60px + env(safe-area-inset-top)); bottom: calc(108px + env(safe-area-inset-bottom));
+      background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.35); animation: expIn .3s ease-out; }
+    #expOverlay iframe { display: block; width: 100%; height: 100%; border: 0; }
+    #expOverlay .exp-close { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 50%;
+      background: rgba(0,0,0,.55); color: #fff; font-size: 13px; }
+    @keyframes expIn { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+    .loc-chip { margin-left: 8px; font-size: 12px; opacity: .9; }
 
     /* While scanning: camera and live canvas share the screen */
     body.scanning .topbar { display: none; }
@@ -156,13 +210,48 @@
 
   <input type="file" id="fileInput" accept="image/*" hidden>
 
+  <!-- Add experience: right sidebar on desktop, pop-out on mobile -->
+  <div id="drawerScrim" hidden></div>
+  <aside id="drawer" aria-label="New experience" aria-hidden="true">
+    <div class="drawer-head"><b>New experience</b><button class="pill" id="drawerClose" type="button">Close</button></div>
+    <form class="drawer-body" id="expForm" novalidate>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose an HTML file">
+        <div id="dropText">Drop an HTML file here<br><small>or tap to choose · JavaScript is removed</small></div>
+      </div>
+      <input type="file" id="htmlInput" accept=".html,.htm,text/html" hidden>
+      <label class="field">Title<input id="expTitle" placeholder="e.g. In-stadium welcome" maxlength="80" autocomplete="off"></label>
+      <fieldset id="locSet">
+        <legend><label><input type="checkbox" id="useLoc"> Location</label></legend>
+        <div class="row2">
+          <label class="field">Latitude<input id="expLat" placeholder="40.8135" autocomplete="off"></label>
+          <label class="field">Longitude<input id="expLng" placeholder="-74.0745" autocomplete="off"></label>
+        </div>
+        <div class="row2">
+          <label class="field">Radius (m)<input id="expRadius" value="200" autocomplete="off"></label>
+          <button class="pill" id="useHere" type="button" style="align-self:end">Use my location</button>
+        </div>
+      </fieldset>
+      <fieldset id="dateSet">
+        <legend><label><input type="checkbox" id="useDates"> Date range</label></legend>
+        <label class="field">Start<input type="datetime-local" id="expStart"></label>
+        <label class="field">End<input type="datetime-local" id="expEnd"></label>
+      </fieldset>
+      <div class="form-error" id="expError"></div>
+      <button class="btn" type="submit">Save experience</button>
+    </form>
+  </aside>
+
   <!-- Camera viewfinder -->
   <div id="scanner" class="off" hidden>
     <video id="video" autoplay playsinline muted></video>
     <div id="flash"></div>
     <div class="guide" id="guide"></div>
+    <div id="expOverlay" hidden>
+      <iframe sandbox="" title="Experience"></iframe>
+      <button class="exp-close" id="expClose" aria-label="Close experience">✕</button>
+    </div>
     <div class="scan-top">
-      <span id="scanTitle"></span>
+      <span><span id="scanTitle"></span><span class="loc-chip" id="locChip"></span></span>
       <button id="closeScan">Done</button>
     </div>
     <div class="rail" id="rail">
@@ -259,7 +348,7 @@
     const tree = $('tree'), links = $('links'), cardEl = $('card');
     const SPOKE_GAP = 14, SPOKE_LEN = 110, LABEL_GAP = 10, STATS_GAP = 28;
     let bounds = { tree: null, root: null };
-    let statsEl, spokeLabel;
+    let statsEl, spokeLabel, expLabel, expList;
 
     function buildTree() {
       spokeLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Statistics' });
@@ -275,14 +364,19 @@
         }
         statsEl.append(group);
       }
-      tree.append(spokeLabel, statsEl);
+      expLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Experiences' });
+      expList = Object.assign(document.createElement('div'), { className: 'exp-list' });
+      tree.append(spokeLabel, statsEl, expLabel, expList);
     }
 
-    // Card ← dotted spoke ← "Statistics" ← metrics list, all vertically centered on the card.
+    // Stats ← "Statistics" • ··· card ··· • "Experiences" → experiences list, all centered on the card.
     function layout() {
       const cardLeft = -cardEl.offsetWidth / 2, cardTop = -cardEl.offsetHeight / 2;
       const lineStart = cardLeft - SPOKE_GAP, dotX = lineStart - SPOKE_LEN;
-      links.innerHTML = `<path id="link-stats" d="M${lineStart} 0 H${dotX}"/><circle cx="${dotX}" cy="0" r="2.5"/>`;
+      const rStart = -cardLeft + SPOKE_GAP, rDot = rStart + SPOKE_LEN;
+      links.innerHTML = `<path id="link-stats" d="M${lineStart} 0 H${dotX}"/><circle cx="${dotX}" cy="0" r="2.5"/>`
+        + `<path id="link-exp" d="M${rStart} 0 H${rDot}"/><circle cx="${rDot}" cy="0" r="2.5"/>`;
+
       const labelLeft = dotX - LABEL_GAP - spokeLabel.offsetWidth;
       spokeLabel.style.left = labelLeft + 'px';
       spokeLabel.style.top = '0px';
@@ -290,18 +384,27 @@
       const statsTop = -statsEl.offsetHeight / 2;
       statsEl.style.left = statsLeft + 'px';
       statsEl.style.top = statsTop + 'px';
-      const top = Math.min(cardTop, statsTop);
-      bounds.tree = { x: statsLeft, y: top, w: -cardLeft - statsLeft, h: -2 * top };
+
+      const expLabelLeft = rDot + LABEL_GAP;
+      expLabel.style.left = expLabelLeft + 'px';
+      expLabel.style.top = '0px';
+      const expLeft = expLabelLeft + expLabel.offsetWidth + STATS_GAP;
+      const expTop = -expList.offsetHeight / 2;
+      expList.style.left = expLeft + 'px';
+      expList.style.top = expTop + 'px';
+
+      const top = Math.min(cardTop, statsTop, expTop);
+      bounds.tree = { x: statsLeft, y: top, w: expLeft + expList.offsetWidth - statsLeft, h: -2 * top };
       bounds.root = { x: cardLeft, y: cardTop, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
     }
 
-    let litTimer = null;
-    function light() {
-      const p = links.querySelector('#link-stats');
+    const litTimers = {};
+    function light(id = 'stats') {
+      const p = links.querySelector('#link-' + id);
       if (!p) return;
       p.classList.add('lit');
-      clearTimeout(litTimer);
-      litTimer = setTimeout(() => p.classList.remove('lit'), 250);
+      clearTimeout(litTimers[id]);
+      litTimers[id] = setTimeout(() => p.classList.remove('lit'), 250);
     }
 
     function renderMetrics(pulse = true) {
@@ -543,6 +646,8 @@
       flash.classList.add('on');
       requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove('on')));
       navigator.vibrate?.(40);
+      const exp = pickExperience();
+      if (exp) showExperience(exp);
       pushLive(true);
       onTriggerSeen(card, metrics);
     }
@@ -570,6 +675,7 @@
       renderMetrics();
       setRail(false);
       cardEl.classList.remove('seen');
+      hideExperience();
       pushLive(true);
       onTriggerLost(card, metrics);
     }
@@ -684,6 +790,7 @@
       $('scanner').hidden = false;
       pushLive(true);
       if (sync.on) sync.api.onDisconnect(roomRef('live')).remove();
+      startLocation();
       setRail(false);
       requestAnimationFrame(fit);
       $('scanTitle').textContent = card.title;
@@ -732,6 +839,8 @@
       visible = false;
       if (imp) { imp.lostAt ??= Date.now(); endImpression(); }
       $('scanner').hidden = true;
+      stopLocation();
+      hideExperience();
       document.body.classList.remove('scanning');
       pushLive(true);
       requestAnimationFrame(fit);
@@ -746,6 +855,251 @@
     $('scanBtn').onclick = openScanner;
     $('closeScan').onclick = closeScanner;
     document.addEventListener('visibilitychange', () => { if (document.hidden && stream) closeScanner(); });
+
+    /* ---------------- Experiences: HTML shown in the camera, by location and time ---------------- */
+    const EXP_KEY = 'contextCanvas.experiences.v1';
+    const MAX_HTML_BYTES = 300 * 1024;
+    let experiences = loadJSON(EXP_KEY);
+    const expanded = new Set();
+    let currentExp = null, here = null, geoWatch = null, lastExpKey = '';
+
+    const fmtWhen = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+    function saveExperiencesLocal() { try { localStorage.setItem(EXP_KEY, JSON.stringify(experiences)); } catch {} }
+    function upsertExperience(x) {
+      experiences[x.id] = x;
+      saveExperiencesLocal();
+      put(`experiences/${x.id}`, x);
+      renderExperiences();
+    }
+    function removeExperience(id) {
+      delete experiences[id];
+      expanded.delete(id);
+      saveExperiencesLocal();
+      put(`experiences/${id}`, null);
+      renderExperiences();
+    }
+    function applyExperiences(v) {
+      const plays = (m) => Object.values(m).reduce((n, x) => n + (x.plays || 0), 0);
+      const before = plays(experiences);
+      experiences = v || {};
+      saveExperiencesLocal();
+      if (plays(experiences) > before) light('exp');
+      renderExperiences();
+    }
+
+    // Canvas node: titles with play/pause; tap a title to expand its details.
+    function renderExperiences() {
+      const list = Object.values(experiences).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      const playingId = currentExp?.id || remoteLive?.playing || null;
+      const key = JSON.stringify([list.map((x) => [x.id, x.title, x.active, x.plays, x.lastPlayedAt]), [...expanded], playingId]);
+      if (key === lastExpKey) return;
+      lastExpKey = key;
+
+      expList.replaceChildren();
+      if (!list.length) expList.append(Object.assign(document.createElement('div'), { className: 'exp-empty', textContent: 'No experiences yet' }));
+      for (const x of list) {
+        const row = document.createElement('div');
+        const head = Object.assign(document.createElement('div'), { className: 'exp-head' });
+        const play = Object.assign(document.createElement('button'), {
+          className: 'exp-play' + (x.active ? ' on' : ''), textContent: x.active ? '❚❚' : '▶',
+        });
+        play.setAttribute('aria-label', (x.active ? 'Pause ' : 'Play ') + x.title);
+        play.onclick = () => upsertExperience({ ...x, active: !x.active });
+        const title = Object.assign(document.createElement('button'), { className: 'exp-title' + (x.active ? '' : ' paused'), textContent: x.title });
+        title.setAttribute('aria-expanded', expanded.has(x.id));
+        title.onclick = () => { expanded.has(x.id) ? expanded.delete(x.id) : expanded.add(x.id); renderExperiences(); };
+        head.append(play, title);
+        if (playingId === x.id) head.append(Object.assign(document.createElement('span'), { className: 'exp-now', textContent: '● showing' }));
+        row.append(head);
+        if (expanded.has(x.id)) row.append(experienceDetails(x));
+        expList.append(row);
+      }
+      const add = Object.assign(document.createElement('button'), { className: 'exp-link', textContent: '+ Add experience' });
+      add.onclick = openDrawer;
+      expList.append(add);
+      if (bounds.tree) layout();
+    }
+
+    function experienceDetails(x) {
+      const dl = Object.assign(document.createElement('dl'), { className: 'exp-details' });
+      const item = (k, v) => dl.append(Object.assign(document.createElement('dt'), { textContent: k }), Object.assign(document.createElement('dd'), { textContent: v }));
+      item('Where', x.lat != null ? `${x.lat.toFixed(4)}, ${x.lng.toFixed(4)} · ${x.radius} m` : 'Anywhere');
+      item('When', x.start || x.end ? `${x.start ? fmtWhen(x.start) : 'Now'} → ${x.end ? fmtWhen(x.end) : 'No end'}` : 'Any time');
+      item('Status', x.active ? 'Playing' : 'Paused');
+      item('Shown', x.plays ? `${x.plays}×` : 'Not yet');
+      if (x.history?.length) {
+        item('Log', x.history.slice().reverse()
+          .map((h) => fmtWhen(h.at) + (h.lat != null ? ` · ${h.lat.toFixed(4)}, ${h.lng.toFixed(4)}` : '')).join('\n'));
+      }
+      const preview = Object.assign(document.createElement('div'), { className: 'exp-preview' });
+      const frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', '');           // no scripts, no same-origin access
+      frame.title = x.title;
+      frame.srcdoc = x.html;
+      preview.append(frame);
+      const del = Object.assign(document.createElement('button'), { className: 'exp-link', textContent: 'Delete' });
+      del.onclick = () => { if (confirm(`Delete “${x.title}”?`)) removeExperience(x.id); };
+      dl.append(preview, del);
+      return dl;
+    }
+
+    // Choose what to show: nearest location match, then date-only, then anywhere/any time.
+    function distanceM(a, b) {
+      const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+      return 2 * 6371000 * Math.asin(Math.sqrt(h));
+    }
+    function pickExperience(now = Date.now()) {
+      let best = null, bestScore = Infinity;
+      for (const x of Object.values(experiences)) {
+        if (!x.active || (x.start && now < x.start) || (x.end && now > x.end)) continue;
+        let score;
+        if (x.lat != null) {
+          if (!here) continue;
+          const d = distanceM(here, x);
+          if (d > x.radius + Math.min(here.acc || 0, 100)) continue;
+          score = d;
+        } else {
+          score = (x.start || x.end ? 2e13 : 4e13) + (x.createdAt || 0);
+        }
+        if (score < bestScore) { best = x; bestScore = score; }
+      }
+      return best;
+    }
+
+    function showExperience(x) {
+      currentExp = x;
+      $('expOverlay').querySelector('iframe').srcdoc = x.html;
+      $('expOverlay').hidden = false;
+      const entry = { at: Date.now(), ...(here ? { lat: +here.lat.toFixed(5), lng: +here.lng.toFixed(5) } : {}) };
+      upsertExperience({ ...x, plays: (x.plays || 0) + 1, lastPlayedAt: entry.at, history: [...(x.history || []), entry].slice(-5) });
+      light('exp');
+    }
+    function hideExperience() {
+      if (!currentExp) return;
+      currentExp = null;
+      $('expOverlay').hidden = true;
+      $('expOverlay').querySelector('iframe').srcdoc = '';
+      renderExperiences();
+    }
+    $('expClose').onclick = () => { hideExperience(); pushLive(true); };
+
+    // Phone location while scanning (the camera itself can't tell a stadium from a living room).
+    function setLocChip(text) { $('locChip').textContent = text; }
+    function startLocation() {
+      if (!navigator.geolocation) return setLocChip('📍 unavailable');
+      setLocChip('📍 locating…');
+      geoWatch = navigator.geolocation.watchPosition(
+        (p) => {
+          here = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) };
+          setLocChip(`📍 ±${here.acc} m`);
+          pushLive();
+        },
+        () => setLocChip('📍 off'),
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
+      );
+    }
+    function stopLocation() {
+      if (geoWatch != null) navigator.geolocation.clearWatch(geoWatch);
+      geoWatch = null;
+      setLocChip('');
+    }
+
+    /* ---- Drawer: add an experience ---- */
+    let draft = null;
+    function formError(msg) { $('expError').textContent = msg; }
+    function openDrawer() {
+      draft = null;
+      $('expForm').reset();
+      $('expRadius').value = '200';
+      ['locSet', 'dateSet'].forEach((id) => $(id).classList.remove('on'));
+      $('drop').classList.remove('has-file');
+      $('drop').querySelectorAll('.file-name, iframe').forEach((n) => n.remove());
+      $('dropText').hidden = false;
+      formError('');
+      $('drawerScrim').hidden = false;
+      $('drawer').classList.add('open');
+      $('drawer').setAttribute('aria-hidden', 'false');
+    }
+    function closeDrawer() {
+      $('drawer').classList.remove('open');
+      $('drawer').setAttribute('aria-hidden', 'true');
+      $('drawerScrim').hidden = true;
+    }
+    $('drawerClose').onclick = closeDrawer;
+    $('drawerScrim').onclick = closeDrawer;
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('drawer').classList.contains('open')) closeDrawer(); });
+
+    async function loadHtmlFile(file) {
+      if (!file) return;
+      if (!/\.html?$/i.test(file.name) && file.type !== 'text/html') return formError('Please choose an .html file');
+      if (file.size > MAX_HTML_BYTES) return formError('That HTML file is over 300 KB');
+      const doc = new DOMParser().parseFromString(await file.text(), 'text/html');
+      // No JavaScript for now: strip scripts, embeds, refreshes, inline handlers and javascript: URLs.
+      doc.querySelectorAll('script, noscript, iframe, frame, object, embed, meta[http-equiv]').forEach((n) => n.remove());
+      doc.querySelectorAll('*').forEach((el) => [...el.attributes].forEach((a) => {
+        if (/^on/i.test(a.name) || /^\s*javascript:/i.test(a.value)) el.removeAttribute(a.name);
+      }));
+      draft = { html: '<!doctype html>\n' + doc.documentElement.outerHTML };
+      if (!$('expTitle').value.trim()) $('expTitle').value = (doc.title.trim() || file.name.replace(/\.html?$/i, '')).slice(0, 80);
+      const drop = $('drop');
+      drop.querySelectorAll('.file-name, iframe').forEach((n) => n.remove());
+      $('dropText').hidden = true;
+      drop.classList.add('has-file');
+      const frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', '');
+      frame.title = 'Preview';
+      frame.srcdoc = draft.html;
+      drop.append(Object.assign(document.createElement('div'), { className: 'file-name', textContent: `${file.name} · tap to replace` }), frame);
+      formError('');
+    }
+
+    const dropEl = $('drop');
+    dropEl.addEventListener('click', () => $('htmlInput').click());
+    dropEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('htmlInput').click(); } });
+    ['dragenter', 'dragover'].forEach((t) => dropEl.addEventListener(t, (e) => { e.preventDefault(); dropEl.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach((t) => dropEl.addEventListener(t, () => dropEl.classList.remove('over')));
+    dropEl.addEventListener('drop', (e) => { e.preventDefault(); loadHtmlFile(e.dataTransfer.files[0]); });
+    // Stop a missed drop from navigating away from the canvas.
+    ['dragover', 'drop'].forEach((t) => addEventListener(t, (e) => e.preventDefault()));
+    $('htmlInput').addEventListener('change', (e) => { loadHtmlFile(e.target.files[0]); e.target.value = ''; });
+
+    $('useLoc').onchange = (e) => $('locSet').classList.toggle('on', e.target.checked);
+    $('useDates').onchange = (e) => $('dateSet').classList.toggle('on', e.target.checked);
+    $('useHere').onclick = () => {
+      if (!navigator.geolocation) return formError('Location is not available on this device');
+      $('useHere').textContent = 'Locating…';
+      navigator.geolocation.getCurrentPosition(
+        (p) => { $('expLat').value = p.coords.latitude.toFixed(6); $('expLng').value = p.coords.longitude.toFixed(6); $('useHere').textContent = 'Use my location'; },
+        () => { formError('Could not get your location'); $('useHere').textContent = 'Use my location'; },
+        { enableHighAccuracy: true, timeout: 15000 },
+      );
+    };
+
+    $('expForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!draft) return formError('Add an HTML file first');
+      const title = $('expTitle').value.trim();
+      if (!title) return formError('Add a title');
+      const x = { id: 'x' + Date.now().toString(36) + clientId, title, html: draft.html, active: true, createdAt: Date.now(), plays: 0 };
+      if ($('useLoc').checked) {
+        const lat = parseFloat($('expLat').value), lng = parseFloat($('expLng').value), radius = parseFloat($('expRadius').value);
+        if (!(lat >= -90 && lat <= 90) || !(lng >= -180 && lng <= 180)) return formError('Enter a valid latitude and longitude');
+        if (!(radius > 0)) return formError('Radius must be more than 0 m');
+        Object.assign(x, { lat, lng, radius: Math.round(radius) });
+      }
+      if ($('useDates').checked) {
+        const start = $('expStart').value ? new Date($('expStart').value).getTime() : null;
+        const end = $('expEnd').value ? new Date($('expEnd').value).getTime() : null;
+        if (!start && !end) return formError('Pick a start and/or end date');
+        if (start && end && end <= start) return formError('End must be after start');
+        if (start) x.start = start;
+        if (end) x.end = end;
+      }
+      upsertExperience(x);
+      closeDrawer();
+    });
 
     /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
     // Firebase web config (public by design; access is governed by database rules). Set to null to run on this device only.
@@ -784,6 +1138,8 @@
         scanning: document.body.classList.contains('scanning'),
         inView: !!imp && !imp.lostAt,
         dwellMs: imp ? liveDwell() : 0,
+        playing: currentExp?.id || null,
+        where: here && document.body.classList.contains('scanning') ? { lat: +here.lat.toFixed(5), lng: +here.lng.toFixed(5), acc: here.acc } : null,
         by: clientId,
       });
     }
@@ -806,10 +1162,13 @@
       Object.assign(card, { title: 'Untitled', photo: null, photoId: null, target: null, seen: 0 });
       Object.assign(metrics, blankMetrics());
       lastTarget = null;
-      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); } catch {}
+      experiences = {};
+      expanded.clear();
+      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); } catch {}
       cardEl.classList.remove('seen');
       renderCard();
       renderMetrics(false);
+      renderExperiences();
       fit();
     }
     function resetEverything() {
@@ -854,6 +1213,7 @@
       if (!imp) cardEl.classList.toggle('seen', !!remoteLive?.inView);
       updateSyncPill();
       renderMetrics(false);
+      renderExperiences();
     }
 
     async function startSync() {
@@ -873,6 +1233,7 @@
         api.onValue(roomRef('photo'), (s) => applyPhoto(s.val()));
         api.onValue(roomRef('metrics'), (s) => applyMetrics(s.val()));
         api.onValue(roomRef('live'), (s) => applyLive(s.val()));
+        api.onValue(roomRef('experiences'), (s) => applyExperiences(s.val()));
         updateSyncPill();
       } catch (err) {
         console.error('[sync]', err);
@@ -881,11 +1242,12 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
     renderMetrics(false);
+    renderExperiences();
     layout();
     fit();
     document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
