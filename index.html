@@ -109,6 +109,26 @@
     .sched-error { color: #c0392b; font-size: 11.5px; }
     .btn.sm { padding: 5px 12px; font-size: 12.5px; }
 
+    /* ---------- Ledger spoke (top-left of the card) ---------- */
+    .ledger { position: absolute; width: 250px; font-size: 12.5px; color: var(--muted); }
+    .ledger-sum { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; margin-bottom: 5px; }
+    .ledger-sum.done { color: var(--ok); }
+    .ledger-sum.over { color: #c0392b; }
+    .ledger-bar { display: flex; gap: 1px; height: 3px; margin-bottom: 8px; background: var(--line); border-radius: 2px; overflow: hidden; }
+    .ledger-bar i { display: block; height: 100%; }
+    .ledger-row { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; cursor: default; }
+    .ledger-row .name { flex: 1; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ledger-row .role { font-size: 10.5px; color: #a3a39b; }
+    .ledger-row.fee .name { color: var(--muted); }
+    .ledger-row b { font-weight: 560; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .ledger-row .rm { width: 14px; padding: 0; background: none; color: #b9b9b1; font-size: 12px; line-height: 1; }
+    .ledger-row .rm:hover { color: #c0392b; }
+    .ledger-row .rm-space { width: 14px; }
+    .ledger-form { display: grid; grid-template-columns: 1fr 76px; gap: 6px; margin-top: 6px; }
+    .ledger-form input { font: inherit; font-size: 16px; color: var(--ink); padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px;
+      background: #fff; min-width: 0; width: 100%; }
+    .ledger-form .sched-error, .ledger-form .sched-actions { grid-column: 1 / -1; }
+
     /* ---------- Add-experience drawer (sidebar on desktop, pop-out on mobile) ---------- */
     #drawerScrim { position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,.18); }
     #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 92vw); z-index: 30; background: var(--card);
@@ -360,9 +380,9 @@
 
     /* ---------------- Statistics spoke: build, lay out, render ---------------- */
     const tree = $('tree'), links = $('links'), cardEl = $('card');
-    const SPOKE_GAP = 14, SPOKE_LEN = 110, TOP_SPOKE_LEN = 56, LABEL_GAP = 10, STATS_GAP = 28;
+    const SPOKE_GAP = 14, SPOKE_LEN = 110, TOP_SPOKE_LEN = 56, DIAG_SPOKE_LEN = 72, LABEL_GAP = 10, STATS_GAP = 28;
     let bounds = { tree: null, root: null };
-    let statsEl, spokeLabel, expLabel, expList, schedLabel, schedEl;
+    let statsEl, spokeLabel, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl;
 
     function buildTree() {
       spokeLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Statistics' });
@@ -382,18 +402,22 @@
       expList = Object.assign(document.createElement('div'), { className: 'exp-list' });
       schedLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Schedule' });
       schedEl = Object.assign(document.createElement('div'), { className: 'sched' });
-      tree.append(spokeLabel, statsEl, expLabel, expList, schedLabel, schedEl);
+      ledgerLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Ledger' });
+      ledgerEl = Object.assign(document.createElement('div'), { className: 'ledger' });
+      tree.append(spokeLabel, statsEl, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl);
     }
 
-    // Spokes from the card: Schedule above, Statistics left, Experiences right; content sits beyond each label.
+    // Spokes from the card: Ledger top-left, Schedule above, Statistics left, Experiences right; content sits beyond each label.
     function layout() {
       const cardLeft = -cardEl.offsetWidth / 2, cardTop = -cardEl.offsetHeight / 2;
       const lineStart = cardLeft - SPOKE_GAP, dotX = lineStart - SPOKE_LEN;
       const rStart = -cardLeft + SPOKE_GAP, rDot = rStart + SPOKE_LEN;
       const tStart = cardTop - SPOKE_GAP, tDot = tStart - TOP_SPOKE_LEN;
+      const dStartX = cardLeft - 8, dStartY = cardTop - 8, dDotX = dStartX - DIAG_SPOKE_LEN, dDotY = dStartY - DIAG_SPOKE_LEN;
       links.innerHTML = `<path id="link-stats" d="M${lineStart} 0 H${dotX}"/><circle cx="${dotX}" cy="0" r="2.5"/>`
         + `<path id="link-exp" d="M${rStart} 0 H${rDot}"/><circle cx="${rDot}" cy="0" r="2.5"/>`
-        + `<path id="link-sched" d="M0 ${tStart} V${tDot}"/><circle cx="0" cy="${tDot}" r="2.5"/>`;
+        + `<path id="link-sched" d="M0 ${tStart} V${tDot}"/><circle cx="0" cy="${tDot}" r="2.5"/>`
+        + `<path id="link-ledger" d="M${dStartX} ${dStartY} L${dDotX} ${dDotY}"/><circle cx="${dDotX}" cy="${dDotY}" r="2.5"/>`;
 
       const labelLeft = dotX - LABEL_GAP - spokeLabel.offsetWidth;
       spokeLabel.style.left = labelLeft + 'px';
@@ -418,9 +442,18 @@
       schedEl.style.left = -schedEl.offsetWidth / 2 + 'px';
       schedEl.style.top = schedTop + 'px';
 
-      const top = Math.min(cardTop, statsTop, expTop, schedTop);
+      const ledgerLabelCenter = dDotY - LABEL_GAP - ledgerLabel.offsetHeight / 2;
+      ledgerLabel.style.left = dDotX - ledgerLabel.offsetWidth / 2 + 'px';
+      ledgerLabel.style.top = ledgerLabelCenter + 'px';
+      const ledgerLeft = dDotX + ledgerLabel.offsetWidth / 2 - ledgerEl.offsetWidth;
+      const ledgerTop = ledgerLabelCenter - ledgerLabel.offsetHeight / 2 - 12 - ledgerEl.offsetHeight;
+      ledgerEl.style.left = ledgerLeft + 'px';
+      ledgerEl.style.top = ledgerTop + 'px';
+
+      const minX = Math.min(statsLeft, ledgerLeft), maxX = expLeft + expList.offsetWidth;
+      const top = Math.min(cardTop, statsTop, expTop, schedTop, ledgerTop);
       const bottom = Math.max(-cardTop, -statsTop, expTop + expList.offsetHeight);
-      bounds.tree = { x: statsLeft, y: top, w: expLeft + expList.offsetWidth - statsLeft, h: bottom - top };
+      bounds.tree = { x: minX, y: top, w: maxX - minX, h: bottom - top };
       bounds.root = { x: cardLeft, y: cardTop, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
     }
 
@@ -960,6 +993,105 @@
     // Keep "Day N of N" current across midnight.
     setInterval(() => { if (schedule && !schedEditing) renderSchedule(); }, 60000);
 
+    /* ---------------- Ledger: stakeholder allocation (SPAT fixed at 3%) ---------------- */
+    // Stored in basis points so percentages add up exactly (10000 bps = 100%).
+    const LEDGER_KEY = 'contextCanvas.ledger.v1';
+    const PLATFORM_NAME = 'SPAT', PLATFORM_BPS = 300, STAKEHOLDER_BPS = 10000 - PLATFORM_BPS;
+    const LEDGER_SHADES = ['#74746c', '#a3a39b', '#8a8a82', '#c4c4bc', '#b3b3ab'];
+    let stakeholders = loadJSON(LEDGER_KEY);
+    let ledgerAdding = false;
+
+    const fmtPct = (bps) => `${+(bps / 100).toFixed(2)}%`;
+    const allocatedBps = () => Object.values(stakeholders).reduce((n, x) => n + (x.bps || 0), 0);
+    function saveLedgerLocal() { try { localStorage.setItem(LEDGER_KEY, JSON.stringify(stakeholders)); } catch {} }
+
+    function renderLedger() {
+      const list = Object.values(stakeholders).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      const used = allocatedBps(), open = STAKEHOLDER_BPS - used;
+      ledgerEl.replaceChildren();
+
+      const sum = Object.assign(document.createElement('div'), { className: 'ledger-sum' + (open === 0 ? ' done' : open < 0 ? ' over' : '') });
+      sum.append(
+        Object.assign(document.createElement('span'), { textContent: `Stakeholders ${fmtPct(used)} of ${fmtPct(STAKEHOLDER_BPS)}` }),
+        Object.assign(document.createElement('span'), { textContent: open === 0 ? 'Fully allocated' : open > 0 ? `${fmtPct(open)} open` : `Over by ${fmtPct(-open)}` }),
+      );
+      const bar = Object.assign(document.createElement('div'), { className: 'ledger-bar' });
+      list.forEach((x, i) => bar.append(Object.assign(document.createElement('i'), { style: `flex:0 0 ${x.bps / 100}%;background:${LEDGER_SHADES[i % LEDGER_SHADES.length]}` })));
+      bar.append(Object.assign(document.createElement('i'), { style: `flex:0 0 ${PLATFORM_BPS / 100}%;margin-left:auto;background:var(--ink)` }));
+      ledgerEl.append(sum, bar);
+
+      for (const x of list) {
+        ledgerEl.append(ledgerRow(x.name, '', x.bps, () => {
+          if (!confirm(`Remove ${x.name} from the ledger?`)) return;
+          delete stakeholders[x.id];
+          saveLedgerLocal();
+          put(`ledger/${x.id}`, null);
+          renderLedger();
+        }));
+      }
+      ledgerEl.append(ledgerRow(PLATFORM_NAME, 'platform fee', PLATFORM_BPS, null));
+
+      if (ledgerAdding) {
+        ledgerEl.append(ledgerForm(open));
+        ledgerEl.querySelector('input')?.focus({ preventScroll: true });
+      } else if (open > 0) {
+        ledgerEl.append(linkButton('+ Add stakeholder', () => { ledgerAdding = true; renderLedger(); }));
+      }
+      if (bounds.tree) layout();
+    }
+
+    function ledgerRow(name, role, bps, onRemove) {
+      const row = Object.assign(document.createElement('div'), {
+        className: 'ledger-row' + (onRemove ? '' : ' fee'),
+        title: `$${(bps / 100).toFixed(2)} of every $100 sale`,
+      });
+      row.append(Object.assign(document.createElement('span'), { className: 'name', textContent: name }));
+      if (role) row.append(Object.assign(document.createElement('span'), { className: 'role', textContent: role }));
+      row.append(Object.assign(document.createElement('b'), { textContent: fmtPct(bps) }));
+      if (onRemove) {
+        const rm = Object.assign(document.createElement('button'), { className: 'rm', type: 'button', textContent: '×', onclick: onRemove });
+        rm.setAttribute('aria-label', `Remove ${name}`);
+        row.append(rm);
+      } else {
+        row.append(Object.assign(document.createElement('span'), { className: 'rm-space' }));
+      }
+      return row;
+    }
+
+    function ledgerForm(open) {
+      const form = Object.assign(document.createElement('form'), { className: 'ledger-form', noValidate: true });
+      form.innerHTML = `<input data-field="name" placeholder="Stakeholder name" maxlength="60" autocomplete="off" aria-label="Stakeholder name">
+        <input data-field="pct" placeholder="${fmtPct(Math.max(open, 0))}" inputmode="decimal" autocomplete="off" aria-label="Percentage">
+        <div class="sched-error"></div>
+        <div class="sched-actions"><button class="btn sm" type="submit">Add</button></div>`;
+      form.querySelector('.sched-actions').append(linkButton('Cancel', () => { ledgerAdding = false; renderLedger(); }));
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const error = form.querySelector('.sched-error');
+        const name = form.querySelector('[data-field=name]').value.trim();
+        const bps = Math.round(parseFloat(form.querySelector('[data-field=pct]').value.replace('%', '').replace(',', '.')) * 100);
+        const openNow = STAKEHOLDER_BPS - allocatedBps();
+        const taken = [PLATFORM_NAME, ...Object.values(stakeholders).map((x) => x.name)].some((n) => n.toLowerCase() === name.toLowerCase());
+        if (!name) { error.textContent = 'Add a name'; return; }
+        if (taken) { error.textContent = `${name} is already on the ledger`; return; }
+        if (!(bps > 0)) { error.textContent = 'Enter a percentage above 0'; return; }
+        if (bps > openNow) { error.textContent = `Only ${fmtPct(openNow)} left to allocate`; return; }
+        const x = { id: 's' + Date.now().toString(36) + clientId, name, bps, createdAt: Date.now() };
+        stakeholders[x.id] = x;
+        saveLedgerLocal();
+        put(`ledger/${x.id}`, x);
+        ledgerAdding = openNow - bps > 0;   // keep adding until stakeholders reach 97%
+        renderLedger();
+      });
+      return form;
+    }
+
+    function applyLedger(v) {
+      stakeholders = v || {};
+      saveLedgerLocal();
+      if (!ledgerAdding) renderLedger();
+    }
+
     /* ---------------- Experiences: HTML shown in the camera, by location and time ---------------- */
     const EXP_KEY = 'contextCanvas.experiences.v1';
     const MAX_HTML_BYTES = 300 * 1024;
@@ -1270,12 +1402,15 @@
       expanded.clear();
       schedule = null;
       schedEditing = false;
-      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); localStorage.removeItem(SCHED_KEY); } catch {}
+      stakeholders = {};
+      ledgerAdding = false;
+      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); localStorage.removeItem(SCHED_KEY); localStorage.removeItem(LEDGER_KEY); } catch {}
       cardEl.classList.remove('seen');
       renderCard();
       renderMetrics(false);
       renderExperiences();
       renderSchedule();
+      renderLedger();
       fit();
     }
     function resetEverything() {
@@ -1342,6 +1477,7 @@
         api.onValue(roomRef('live'), (s) => applyLive(s.val()));
         api.onValue(roomRef('experiences'), (s) => applyExperiences(s.val()));
         api.onValue(roomRef('schedule'), (s) => applySchedule(s.val()));
+        api.onValue(roomRef('ledger'), (s) => applyLedger(s.val()));
         updateSyncPill();
       } catch (err) {
         console.error('[sync]', err);
@@ -1350,13 +1486,14 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
     renderMetrics(false);
     renderExperiences();
     renderSchedule();
+    renderLedger();
     layout();
     fit();
     document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
