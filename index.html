@@ -366,7 +366,7 @@
     <div class="drawer-head"><b>New experience</b><button class="pill" id="drawerClose" type="button">Close</button></div>
     <form class="drawer-body" id="expForm" novalidate>
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose an HTML file">
-        <div id="dropText">Drop an HTML file here<br><small>or tap to choose · JavaScript is removed<br>Buttons with data-action (like, save, share, follow, learn-more, buy) count toward stats</small></div>
+        <div id="dropText">Drop an HTML file here<br><small>or tap to choose · JavaScript is removed<br>Elements with data-action (like, save, share, follow, learn-more, buy, or object + data-title) count toward stats</small></div>
       </div>
       <input type="file" id="htmlInput" accept=".html,.htm,text/html" hidden>
       <label class="field">Title<input id="expTitle" placeholder="e.g. In-stadium welcome" maxlength="80" autocomplete="off"></label>
@@ -1470,26 +1470,33 @@
     // Our own small script, injected into the sandboxed frame: it turns taps on [data-action] elements
     // into messages for the camera, and marks them done when the camera confirms.
     function experienceBridge() {
-      const ACTIONS = ['like', 'comment', 'save', 'share', 'follow', 'learn-more', 'buy'];
+      const ACTIONS = ['like', 'comment', 'save', 'share', 'follow', 'learn-more', 'buy', 'object'];
+      let nextId = 1;
       document.addEventListener('click', (e) => {
         const target = e.target.closest('[data-action], a[href]');
         if (!target) return;
         e.preventDefault();
         const action = target.getAttribute('data-action');
-        if (ACTIONS.includes(action)) parent.postMessage({ source: 'context-experience', action }, '*');
+        if (!ACTIONS.includes(action)) return;
+        if (!target.hasAttribute('data-bridge-id')) target.setAttribute('data-bridge-id', String(nextId++));
+        const title = (target.getAttribute('data-title') || target.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        parent.postMessage({ source: 'context-experience', action, title, id: target.getAttribute('data-bridge-id') }, '*');
       });
       addEventListener('message', (e) => {
         const data = e.data || {};
         if (e.source !== parent || data.source !== 'context-canvas') return;
         if (data.type === 'init') document.querySelectorAll('[data-price]').forEach((n) => { n.textContent = data.price || ''; });
         if (data.type === 'done' && ACTIONS.includes(data.action)) {
-          document.querySelectorAll('[data-action="' + data.action + '"]').forEach((n) => n.setAttribute('data-done', ''));
+          const selector = data.action === 'object'
+            ? '[data-bridge-id="' + String(data.id).replace(/[^0-9]/g, '') + '"]'
+            : '[data-action="' + data.action + '"]';
+          document.querySelectorAll(selector).forEach((n) => n.setAttribute('data-done', ''));
         }
       });
     }
     const withActionBridge = (html) => html.replace(/<\/body>/i, '<scr' + 'ipt>(' + experienceBridge.toString() + ')();</scr' + 'ipt></body>');
 
-    const EXPERIENCE_ACTIONS = { like: 'like', comment: 'comment', save: 'save', share: 'share', follow: 'follow', 'learn-more': 'tap', buy: 'buy' };
+    const EXPERIENCE_ACTIONS = { like: 'like', comment: 'comment', save: 'save', share: 'share', follow: 'follow', 'learn-more': 'tap', buy: 'buy', object: 'object' };
     addEventListener('message', (e) => {
       const frame = $('expOverlay').querySelector('iframe');
       const data = e.data || {};
@@ -1497,11 +1504,26 @@
       const type = EXPERIENCE_ACTIONS[data.action];
       if (!type || !currentExp) return;
       if (!imp) return nudge();
-      if (type === 'buy') $('buyBtn').click();
-      else act(type);
-      const done = type === 'buy' ? imp?.purchased : type !== 'comment' && imp?.actions[type];
-      if (done) frame.contentWindow.postMessage({ source: 'context-canvas', type: 'done', action: data.action }, '*');
+      let done;
+      if (type === 'object') done = tapObject(String(data.title || 'Object').slice(0, 40));
+      else if (type === 'buy') { $('buyBtn').click(); done = imp?.purchased; }
+      else { act(type); done = type !== 'comment' && imp?.actions[type]; }
+      if (done) frame.contentWindow.postMessage({ source: 'context-canvas', type: 'done', action: data.action, id: data.id }, '*');
     });
+
+    // A titled object tapped inside an experience: counted once per object per impression and logged with its
+    // title. It also counts toward tap-through, at most once per impression (like Learn more).
+    function tapObject(title) {
+      imp.objects ??= {};
+      if (imp.objects[title]) return true;
+      imp.objects[title] = true;
+      imp.actions.object = true;
+      if (!imp.actions.tap) { imp.actions.tap = true; metrics.taps++; }
+      logAction('object', { title });
+      saveMetrics();
+      renderMetrics();
+      return true;
+    }
 
     /* ---- Drawer: add an experience ---- */
     let draft = null;
@@ -1795,6 +1817,10 @@
       for (const e of imps) { const place = placeOf(e); places.set(place, (places.get(place) || 0) + 1); }
       model.locations = [...places].sort((a, b) => b[1] - a[1]).map(([name, n]) => [name, rate(n, imps.length)]);
 
+      const objectTaps = new Map();
+      for (const e of list) if (e.type === 'object') objectTaps.set(e.title || 'Object', (objectTaps.get(e.title || 'Object') || 0) + 1);
+      model.objects = [...objectTaps].sort((a, b) => b[1] - a[1]).slice(0, 6);
+
       const owed = new Map();
       let platform = 0, unallocated = 0;
       for (const e of buys) {
@@ -1815,6 +1841,7 @@
         if (e.type === 'impression') what = e.dwellMs != null ? `Seen ${sec(e.dwellMs)}` : 'In view now';
         if (e.type === 'purchase') what = `Purchase ${fmtMoney(e.amountCents || 0)}`;
         if (e.type === 'comment') what = `Comment “${e.text || ''}”`;
+        if (e.type === 'object') what = `Tapped ${e.title || 'object'}`;
         const title = e.exp ? experiences[e.exp]?.title : '';
         return [timeLabel(e.t), title ? `${what} · ${title}` : what];
       });
@@ -1882,6 +1909,20 @@
         }
       } else {
         locs.append(el('div', 'dash-empty', 'No impressions yet'));
+      }
+
+      const objs = section('Objects tapped');
+      if (model.objects.length) {
+        const top = model.objects[0][1];
+        for (const [name, n] of model.objects) {
+          const row = el('div', 'share-row');
+          const bar = el('div', 'bar');
+          bar.append(Object.assign(el('i'), { style: `width:${((n / top) * 100).toFixed(1)}%` }));
+          row.append(el('span', '', name), el('b', '', String(n)), bar);
+          objs.append(row);
+        }
+      } else {
+        objs.append(el('div', 'dash-empty', 'No object taps yet'));
       }
 
       const pay = section('Payouts · owed');
@@ -1975,7 +2016,7 @@
         ['Engaged', imps.filter((e) => did(e, ['like', 'comment', 'save', 'share'])).length],
         ['Purchased', imps.filter((e) => did(e, ['purchase'])).length],
       ];
-      const mix = [['like', 'Likes'], ['comment', 'Comments'], ['save', 'Saves'], ['share', 'Shares'], ['follow', 'Follows'], ['tap', 'Learn more'], ['lean-in', 'Leaned in'], ['purchase', 'Purchases']]
+      const mix = [['like', 'Likes'], ['comment', 'Comments'], ['save', 'Saves'], ['share', 'Shares'], ['follow', 'Follows'], ['tap', 'Learn more'], ['lean-in', 'Leaned in'], ['object', 'Object taps'], ['purchase', 'Purchases']]
         .map(([type, label]) => [label, acts.filter((e) => e.type === type).length]);
 
       // One row per campaign day (or per active day without a schedule).
@@ -2179,6 +2220,10 @@
       const engagement = section('Engagement', 'Actions taken in the camera');
       if (d.mix.some(([, v]) => v)) engagement.append(barList(d.mix));
       else empty(engagement, 'No actions yet');
+
+      const objectsSection = section('Objects tapped', 'Titled objects tapped inside experiences');
+      if (m.objects.length) objectsSection.append(barList(m.objects, { fmt: (v) => plural(v, 'tap') }));
+      else empty(objectsSection, 'No object taps yet');
 
       const pay = section('Payouts · owed', 'How purchase revenue splits across the ledger (demo purchases, no funds moved)');
       const paid = d.segs.filter((x) => x.cents > 0);
@@ -2399,7 +2444,7 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();

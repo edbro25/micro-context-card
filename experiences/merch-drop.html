@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Merch Drop</title>
+  <style>
+    /* Fullscreen AR experience: transparent so the live camera shows through. */
+    :root { --ink: #1d1d1b; --cream: #f6f1e7; --blue: #2f6df6; --yellow: #f3a712; --orange: #e4572e; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif; color: var(--ink); -webkit-user-select: none; user-select: none; }
+    button { font: inherit; color: inherit; }
+
+    /* ---------- Headline ---------- */
+    .headline { position: fixed; left: 0; right: 0; top: 11vh; text-align: center; pointer-events: none; animation: drop .8s cubic-bezier(.2,.9,.3,1.25) .1s both; }
+    .headline h1 { margin: 0; font-size: clamp(38px, 12vmin, 88px); font-weight: 900; letter-spacing: -.03em; line-height: .95;
+      color: #fff; -webkit-text-stroke: clamp(2px, .6vmin, 4px) var(--ink); paint-order: stroke fill; text-shadow: 0 6px 18px rgba(0,0,0,.45); }
+    .headline h1 span { color: var(--yellow); }
+    .headline p { display: inline-block; margin: 8px 0 0; padding: 5px 12px; border-radius: 999px; background: var(--ink); color: var(--cream);
+      font-size: clamp(12px, 3.4vmin, 16px); font-weight: 600; box-shadow: 0 6px 16px rgba(0,0,0,.35); }
+
+    /* ---------- Sparkles (decorative) ---------- */
+    .sparkles { position: fixed; inset: 0; pointer-events: none; }
+    .sparkles i { position: absolute; width: 14px; height: 14px; background: var(--yellow); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); animation: twinkle 2.2s ease-in-out infinite; animation-delay: calc(var(--i) * -.37s); }
+
+    /* ---------- Titled objects (each counts toward stats when tapped) ---------- */
+    .obj { position: fixed; display: grid; justify-items: center; gap: 6px; padding: 0; border: 0; background: none; cursor: pointer;
+      animation: fade .6s ease-out both, float 3.6s ease-in-out infinite; animation-delay: calc(var(--i) * 120ms + .4s), calc(var(--i) * -.6s);
+      -webkit-tap-highlight-color: transparent; }
+    .obj .bubble { display: grid; place-items: center; width: clamp(66px, 21vmin, 116px); aspect-ratio: 1; border-radius: 50%;
+      font-size: clamp(34px, 10.5vmin, 60px); background: rgba(255,255,255,.86); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      border: 3px solid var(--ink); box-shadow: 0 10px 24px rgba(0,0,0,.35); transition: background .2s, scale .15s; }
+    .obj:active .bubble { scale: .92; }
+    .obj .tag { padding: 5px 11px; border-radius: 999px; background: var(--ink); color: var(--cream); font-size: clamp(12px, 3.3vmin, 15px); font-weight: 650;
+      white-space: nowrap; box-shadow: 0 6px 14px rgba(0,0,0,.3); }
+    .obj .tag::after { content: " ✓"; visibility: hidden; }
+    .obj[data-done] .bubble { background: var(--yellow); }
+    .obj[data-done] .tag::after { visibility: visible; }
+    .o1 { left: 6vw; top: 27vh; }
+    .o2 { right: 6vw; top: 29vh; }
+    .o3 { left: 7vw; top: 49vh; }
+    .o4 { right: 7vw; top: 51vh; }
+
+    /* ---------- Actions ---------- */
+    .social { position: fixed; left: 0; right: 0; bottom: calc(5vh + 70px); display: flex; justify-content: center; gap: 10px; animation: fade .5s ease-out 1s both; }
+    .social button { padding: 9px 15px; border-radius: 999px; border: 2px solid var(--ink); background: rgba(255,255,255,.88);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: clamp(13px, 3.5vmin, 15px); font-weight: 650; box-shadow: 0 6px 16px rgba(0,0,0,.28); cursor: pointer; }
+    .social button::after, .buy::after { content: " ✓"; visibility: hidden; }
+    .social [data-done] { background: var(--ink); color: var(--cream); }
+    .social [data-done]::after, .buy[data-done]::after { visibility: visible; }
+    .buy { position: fixed; left: 50%; bottom: 5vh; translate: -50% 0; padding: 15px 28px; border-radius: 999px; border: 3px solid var(--ink);
+      background: var(--orange); color: #fff; font-size: clamp(16px, 4.6vmin, 20px); font-weight: 800; white-space: nowrap; cursor: pointer;
+      box-shadow: 0 10px 26px rgba(0,0,0,.4); animation: fade .5s ease-out 1.2s both, pulse 2.2s ease-in-out 2s infinite; }
+    .buy[data-done] { background: var(--ink); animation: none; }
+
+    @keyframes fade { from { opacity: 0; } }
+    @keyframes drop { from { opacity: 0; transform: translateY(-40px) scale(.9); } }
+    @keyframes float { 50% { translate: 0 -8px; } }
+    @keyframes twinkle { 50% { opacity: .15; scale: .5; } }
+    @keyframes pulse { 50% { scale: 1.06; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="headline">
+    <h1>MERCH <span>DROP</span></h1>
+    <p>Tap an item · limited run</p>
+  </div>
+
+  <div class="sparkles" aria-hidden="true">
+    <i style="--i:1; left: 22%; top: 22%"></i><i style="--i:2; left: 74%; top: 20%"></i><i style="--i:3; left: 12%; top: 42%"></i>
+    <i style="--i:4; left: 86%; top: 45%"></i><i style="--i:5; left: 30%; top: 66%"></i><i style="--i:6; left: 68%; top: 68%"></i>
+    <i style="--i:7; left: 50%; top: 9%"></i>
+  </div>
+
+  <!-- Titled objects: data-action="object" + data-title. Each tap is counted and logged with its title. -->
+  <button class="obj o1" data-action="object" data-title="Home Jersey" style="--i:0"><span class="bubble">👕</span><span class="tag">Home Jersey</span></button>
+  <button class="obj o2" data-action="object" data-title="Team Scarf" style="--i:1"><span class="bubble">🧣</span><span class="tag">Team Scarf</span></button>
+  <button class="obj o3" data-action="object" data-title="Snapback" style="--i:2"><span class="bubble">🧢</span><span class="tag">Snapback</span></button>
+  <button class="obj o4" data-action="object" data-title="VIP Upgrade" style="--i:3"><span class="bubble">🎟️</span><span class="tag">VIP Upgrade</span></button>
+
+  <nav class="social">
+    <button data-action="like">♥ Like</button>
+    <button data-action="share">Share</button>
+  </nav>
+  <button class="buy" data-action="buy">Buy bundle <span data-price></span></button>
+</body>
+</html>

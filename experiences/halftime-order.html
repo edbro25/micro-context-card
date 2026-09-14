@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halftime Order</title>
+  <style>
+    /* Fullscreen AR experience: transparent so the live camera shows through. */
+    :root { --ink: #1d1d1b; --cream: #f6f1e7; --green: #1f9d55; --orange: #e4572e; --red: #d7263d; --yellow: #f3a712; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif; color: var(--ink); -webkit-user-select: none; user-select: none; }
+    button { font: inherit; color: inherit; }
+
+    /* ---------- Headline with a scoreboard-style clock ---------- */
+    .headline { position: fixed; left: 0; right: 0; top: 11vh; text-align: center; pointer-events: none; animation: drop .8s cubic-bezier(.2,.9,.3,1.25) .1s both; }
+    .headline h1 { margin: 0; font-size: clamp(38px, 12vmin, 88px); font-weight: 900; letter-spacing: -.03em; line-height: .95;
+      color: #fff; -webkit-text-stroke: clamp(2px, .6vmin, 4px) var(--ink); paint-order: stroke fill; text-shadow: 0 6px 18px rgba(0,0,0,.45); }
+    .headline h1 span { color: var(--green); }
+    .clock { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; padding: 5px 12px; border-radius: 10px; background: var(--ink); color: var(--cream);
+      font-size: clamp(12px, 3.4vmin, 16px); font-weight: 650; box-shadow: 0 6px 16px rgba(0,0,0,.35); }
+    .clock b { color: var(--yellow); font-variant-numeric: tabular-nums; }
+    .clock i { width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: blink 1s steps(1) infinite; }
+
+    /* ---------- Steam and confetti (decorative) ---------- */
+    .confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    .confetti i { position: absolute; top: -20px; width: 8px; height: 14px; border-radius: 2px; background: var(--c);
+      animation: fall 6s linear infinite; animation-delay: calc(var(--i) * -.85s); opacity: .9; }
+
+    /* ---------- Titled objects (each counts toward stats when tapped) ---------- */
+    .obj { position: fixed; display: grid; justify-items: center; gap: 6px; padding: 0; border: 0; background: none; cursor: pointer;
+      animation: fade .6s ease-out both, bob 3.2s ease-in-out infinite; animation-delay: calc(var(--i) * 120ms + .4s), calc(var(--i) * -.7s);
+      -webkit-tap-highlight-color: transparent; }
+    .obj .plate { position: relative; display: grid; place-items: center; width: clamp(66px, 21vmin, 116px); aspect-ratio: 1; border-radius: 28%;
+      font-size: clamp(34px, 10.5vmin, 60px); background: rgba(255,255,255,.86); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      border: 3px solid var(--ink); box-shadow: 0 10px 24px rgba(0,0,0,.35); transition: background .2s, scale .15s; }
+    .obj .plate::before { content: ""; position: absolute; top: -10px; left: 50%; width: 6px; height: 14px; border-radius: 4px; background: rgba(255,255,255,.8);
+      translate: -50% 0; animation: steam 2.4s ease-out infinite; animation-delay: calc(var(--i) * -.6s); }
+    .obj:active .plate { scale: .92; }
+    .obj .tag { padding: 5px 11px; border-radius: 999px; background: var(--ink); color: var(--cream); font-size: clamp(12px, 3.3vmin, 15px); font-weight: 650;
+      white-space: nowrap; box-shadow: 0 6px 14px rgba(0,0,0,.3); }
+    .obj .tag::after { content: " ✓"; visibility: hidden; }
+    .obj[data-done] .plate { background: #bdecc9; }
+    .obj[data-done] .tag::after { visibility: visible; }
+    .o1 { left: 6vw; top: 27vh; }
+    .o2 { right: 6vw; top: 29vh; }
+    .o3 { left: 7vw; top: 49vh; }
+    .o4 { right: 7vw; top: 51vh; }
+
+    /* ---------- Actions ---------- */
+    .social { position: fixed; left: 0; right: 0; bottom: calc(5vh + 70px); display: flex; justify-content: center; gap: 10px; animation: fade .5s ease-out 1s both; }
+    .social button { padding: 9px 15px; border-radius: 999px; border: 2px solid var(--ink); background: rgba(255,255,255,.88);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: clamp(13px, 3.5vmin, 15px); font-weight: 650; box-shadow: 0 6px 16px rgba(0,0,0,.28); cursor: pointer; }
+    .social button::after, .buy::after { content: " ✓"; visibility: hidden; }
+    .social [data-done] { background: var(--ink); color: var(--cream); }
+    .social [data-done]::after, .buy[data-done]::after { visibility: visible; }
+    .buy { position: fixed; left: 50%; bottom: 5vh; translate: -50% 0; padding: 15px 28px; border-radius: 999px; border: 3px solid var(--ink);
+      background: var(--green); color: #fff; font-size: clamp(16px, 4.6vmin, 20px); font-weight: 800; white-space: nowrap; cursor: pointer;
+      box-shadow: 0 10px 26px rgba(0,0,0,.4); animation: fade .5s ease-out 1.2s both, pulse 2.2s ease-in-out 2s infinite; }
+    .buy[data-done] { background: var(--ink); animation: none; }
+
+    @keyframes fade { from { opacity: 0; } }
+    @keyframes drop { from { opacity: 0; transform: translateY(-40px) scale(.9); } }
+    @keyframes bob { 50% { translate: 0 -8px; rotate: -3deg; } }
+    @keyframes steam { 0% { opacity: 0; translate: -50% 0; } 30% { opacity: .9; } 100% { opacity: 0; translate: -50% -22px; } }
+    @keyframes fall { to { transform: translateY(110vh) rotate(540deg); } }
+    @keyframes blink { 50% { opacity: .2; } }
+    @keyframes pulse { 50% { scale: 1.06; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } .confetti { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="headline">
+    <h1>HALF<span>TIME</span></h1>
+    <div class="clock"><i></i>Order to your seat · <b>15:00</b></div>
+  </div>
+
+  <div class="confetti" aria-hidden="true">
+    <i style="--i:1; --c:#e4572e; left: 8%"></i><i style="--i:2; --c:#f3a712; left: 22%"></i><i style="--i:3; --c:#1f9d55; left: 38%"></i>
+    <i style="--i:4; --c:#2f6df6; left: 55%"></i><i style="--i:5; --c:#d7263d; left: 70%"></i><i style="--i:6; --c:#17bebb; left: 84%"></i>
+    <i style="--i:7; --c:#f3a712; left: 94%"></i>
+  </div>
+
+  <!-- Titled objects: data-action="object" + data-title. Each tap is counted and logged with its title. -->
+  <button class="obj o1" data-action="object" data-title="Pizza Slice" style="--i:0"><span class="plate">🍕</span><span class="tag">Pizza Slice</span></button>
+  <button class="obj o2" data-action="object" data-title="Hot Dog" style="--i:1"><span class="plate">🌭</span><span class="tag">Hot Dog</span></button>
+  <button class="obj o3" data-action="object" data-title="Large Soda" style="--i:2"><span class="plate">🥤</span><span class="tag">Large Soda</span></button>
+  <button class="obj o4" data-action="object" data-title="Popcorn" style="--i:3"><span class="plate">🍿</span><span class="tag">Popcorn</span></button>
+
+  <nav class="social">
+    <button data-action="like">♥ Like</button>
+    <button data-action="share">Share</button>
+  </nav>
+  <button class="buy" data-action="buy">Order combo <span data-price></span></button>
+</body>
+</html>
