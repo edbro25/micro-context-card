@@ -3034,7 +3034,7 @@
 
     /* ---------------- Campaigns ---------------- */
     // A shared index (campaigns/<room>) lists every campaign; each name follows that campaign's card title.
-    let campaigns = null, titleLoaded = false;
+    let campaigns = null, titleLoaded = false, leavingCampaign = false;
     const campaignName = (id) => campaigns?.[id]?.name
       || (id === ROOM && card.title !== 'Untitled' ? card.title : id === 'default' ? 'Main campaign' : id);
 
@@ -3047,12 +3047,13 @@
       ids.sort((a, b) => (campaigns?.[a]?.createdAt || 0) - (campaigns?.[b]?.createdAt || 0));
       sel.replaceChildren(...ids.map((id) => new Option(campaignName(id), id)));
       if (isOwner && sync.on) sel.add(new Option('+ New campaign', '__new'));
+      if (isOwner && sync.on && ROOM !== 'default') sel.add(new Option('Delete this campaign…', '__delete'));
       sel.value = ROOM;
     }
 
     // The owner keeps the index in step: registers this campaign and follows title renames.
     function syncCampaignIndex() {
-      if (!sync.on || !isOwner || !campaigns || !titleLoaded) return;
+      if (!sync.on || !isOwner || !campaigns || !titleLoaded || leavingCampaign) return;
       const entry = campaigns[ROOM];
       const name = card.title !== 'Untitled' ? card.title.slice(0, 60) : entry?.name || campaignName(ROOM);
       if (entry?.name === name) return;
@@ -3060,9 +3061,20 @@
         .catch((err) => console.warn('[campaigns]', err?.code || err));
     }
 
+    function landingCampaign(list) {
+      if (!ROOM.startsWith('test-')) return 'default';
+      return Object.keys(list || {}).filter((id) => id !== ROOM && id.startsWith('test-'))
+        .sort((a, b) => (list[a].createdAt || 0) - (list[b].createdAt || 0))[0] || 'default';
+    }
+
     function listenCampaigns() {
       sync.api.onValue(sync.api.ref(sync.db, 'campaigns'),
-        (snap) => { campaigns = snap.val() || {}; renderCampaigns(); syncCampaignIndex(); },
+        (snap) => {
+          const next = snap.val() || {};
+          // Deleted from another screen: move this one (a phone mid-demo, too) somewhere that still exists.
+          if (campaigns?.[ROOM] && !next[ROOM] && !leavingCampaign && ROOM !== 'default') { leavingCampaign = true; location.href = campaignUrl(landingCampaign(next)); return; }
+          campaigns = next; renderCampaigns(); syncCampaignIndex();
+        },
         (err) => { console.warn('[campaigns] no read access', err?.code || err); renderCampaigns(); });
     }
 
@@ -3076,7 +3088,9 @@
       const name = (prompt('Name the new campaign') || '').trim().slice(0, 60);
       if (!name) return;
       const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'campaign';
-      const id = `${ROOM.startsWith('test-') ? 'test-' : ''}${slug}-${Math.random().toString(36).slice(2, 6)}`;
+      let id = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
+      // "test-" rooms are open sandboxes; a real campaign named "Test…" must never land there.
+      id = ROOM.startsWith('test-') ? `test-${id}` : id.startsWith('test-') ? `c-${id}` : id;
       try {
         await sync.api.set(sync.api.ref(sync.db, `campaigns/${id}`), { name, createdAt: Date.now() });
         await sync.api.set(sync.api.ref(sync.db, `demos/${id}/title`), { value: name, by: clientId });
@@ -3087,14 +3101,35 @@
       }
     }
 
+    async function deleteCampaign() {
+      if (!isOwner || !sync.on || ROOM === 'default') return;
+      const name = campaignName(ROOM);
+      if (!confirm(`Delete “${name}”?\n\nIts photo, experiences, schedule, ledger and graph are removed for everyone. This can’t be undone.`)) return;
+      const next = landingCampaign(campaigns);
+      leavingCampaign = true;
+      sync.on = false;   // stop this screen writing metrics or live status back into the room while it's removed
+      try {
+        await sync.api.remove(sync.api.ref(sync.db, `campaigns/${ROOM}`));
+        await sync.api.remove(roomRef());
+        try { [STORE_KEY, METRICS_KEY, EXP_KEY, SCHED_KEY, LEDGER_KEY, EVENTS_KEY].forEach((k) => localStorage.removeItem(k)); } catch {}
+        location.href = campaignUrl(next);
+      } catch (err) {
+        sync.on = true;
+        leavingCampaign = false;
+        console.error('[campaigns]', err);
+        alert('Couldn’t delete the campaign.');
+      }
+    }
+
     $('campaignSelect').addEventListener('change', (e) => {
       const id = e.target.value;
       if (id === '__new') { e.target.value = ROOM; newCampaign(); return; }
+      if (id === '__delete') { e.target.value = ROOM; deleteCampaign(); return; }
       if (id !== ROOM) location.href = campaignUrl(id);
     });
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, graphFilter, shareUrl, openShare, getPeople: () => people, applyRole, getCampaigns: () => campaigns, renderCampaigns, campaignUrl, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, graphFilter, shareUrl, openShare, getPeople: () => people, applyRole, getCampaigns: () => campaigns, renderCampaigns, campaignUrl, deleteCampaign, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
 
     buildTree();
     renderCard();
