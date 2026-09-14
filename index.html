@@ -142,6 +142,41 @@
     .check.done .check-label { color: var(--muted); }
     .check small { display: block; font-size: 11px; color: #a3a39b; }
     .dash-note { margin-top: 8px; font-size: 11.5px; }
+    .dash.full { width: 300px; }
+    .dash-warn { margin: 2px 0 6px; font-size: 11.5px; color: #b7791f; }
+    .dash-section { margin-top: 16px; }
+    .dash-section h4 { margin: 0 0 5px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #a3a39b; }
+    .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 12px; }
+    .kpi span { display: block; font-size: 10.5px; color: #a3a39b; }
+    .kpi b { font-size: 16px; font-weight: 560; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .pace-line { font-size: 12.5px; color: var(--ink); }
+    .pace-sub { font-size: 11px; color: #a3a39b; }
+    .pace-bars { display: flex; align-items: flex-end; gap: 1px; height: 30px; margin-top: 8px; }
+    .pace-bars i { flex: 1; min-height: 1px; background: #c4c4bc; border-radius: 1px 1px 0 0; }
+    .pace-bars i.today { background: var(--ink); }
+    .pace-bars i.future { background: var(--line); }
+    .pace-axis { display: flex; justify-content: space-between; margin-top: 3px; font-size: 10px; color: #a3a39b; }
+    .dash-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+    .dash-table th { padding: 0 0 3px 6px; font-size: 10px; font-weight: 500; color: #a3a39b; text-align: right; }
+    .dash-table th:nth-child(1) { width: 36%; }
+    .dash-table th:nth-child(2) { width: 13%; }
+    .dash-table th:nth-child(3) { width: 15%; }
+    .dash-table th:nth-child(4) { width: 12%; }
+    .dash-table th:nth-child(5) { width: 24%; }
+    .dash-table td { padding: 2px 0 2px 6px; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dash-table th:first-child, .dash-table td:first-child { padding-left: 0; text-align: left; }
+    .share-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin-bottom: 5px; font-size: 12px; color: var(--ink); }
+    .share-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .share-row b { font-weight: 500; font-variant-numeric: tabular-nums; }
+    .share-row .bar { grid-column: 1 / -1; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
+    .share-row .bar i { display: block; height: 100%; background: #9a9a92; }
+    .pay-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; font-size: 12px; color: var(--ink); }
+    .pay-row.fee span, .pay-row.muted span { color: var(--muted); }
+    .pay-row b { font-weight: 560; font-variant-numeric: tabular-nums; }
+    .dash-feed div { display: flex; gap: 8px; padding: 1px 0; font-size: 11.5px; color: var(--ink); }
+    .dash-feed time { flex: none; width: 58px; color: #a3a39b; font-variant-numeric: tabular-nums; }
+    .dash-feed span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dash-empty { font-size: 11.5px; color: #a3a39b; }
 
     /* ---------- Add-experience drawer (sidebar on desktop, pop-out on mobile) ---------- */
     #drawerScrim { position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,.18); }
@@ -1444,20 +1479,28 @@
       } catch { return 'd' + Math.random().toString(36).slice(2, 10); }
     })();
     let events = loadJSON(EVENTS_KEY);
-    let eventSeq = 0;
+    let eventSeq = 0, eventsVersion = 0;
 
     const newEventId = () => `${Date.now().toString(36)}-${deviceId}-${(eventSeq++).toString(36)}`;
     const whereNow = () => (here ? { lat: +here.lat.toFixed(5), lng: +here.lng.toFixed(5), acc: here.acc } : {});
 
+    function saveEventsLocal() {
+      const ids = Object.keys(events).sort((a, b) => events[a].t - events[b].t).slice(-MAX_LOCAL_EVENTS);
+      try { localStorage.setItem(EVENTS_KEY, JSON.stringify(Object.fromEntries(ids.map((k) => [k, events[k]])))); } catch {}
+    }
     function writeEvent(id, event) {
       const clean = Object.fromEntries(Object.entries(event).filter(([, v]) => v !== undefined && v !== null));
       events[id] = clean;
-      const ids = Object.keys(events);
-      if (ids.length > MAX_LOCAL_EVENTS) {
-        ids.sort((a, b) => events[a].t - events[b].t).slice(0, ids.length - MAX_LOCAL_EVENTS).forEach((k) => delete events[k]);
-      }
-      try { localStorage.setItem(EVENTS_KEY, JSON.stringify(events)); } catch {}
+      eventsVersion++;
+      saveEventsLocal();
       put(`events/${id}`, clean);
+      renderDashboard();
+    }
+    function applyEvents(v) {
+      events = v || {};
+      eventsVersion++;
+      saveEventsLocal();
+      renderDashboard();
     }
 
     // Written when the photo comes into view, then completed when the impression ends.
@@ -1487,33 +1530,45 @@
       const used = allocatedBps();
       const exps = Object.values(experiences);
       return [
-        { id: 'photo', label: 'Photo registered', done: !!card.target },
-        { id: 'schedule', label: 'Campaign dates set', done: !!schedule, hint: 'Set a start and end date',
+        { id: 'photo', label: 'Photo registered', done: !!card.target, warn: 'No photo registered' },
+        { id: 'schedule', label: 'Campaign dates set', done: !!schedule, hint: 'Set a start and end date', warn: 'No campaign dates — pace is unavailable',
           go: () => { schedEditing = true; renderSchedule(); } },
         { id: 'ledger', label: `Ledger at ${fmtPct(STAKEHOLDER_BPS)}`, done: used === STAKEHOLDER_BPS,
-          hint: `${fmtPct(used)} of ${fmtPct(STAKEHOLDER_BPS)} allocated`, go: () => { ledgerAdding = true; renderLedger(); } },
+          hint: `${fmtPct(used)} of ${fmtPct(STAKEHOLDER_BPS)} allocated`, warn: `Ledger at ${fmtPct(used)} — the rest of each sale is unallocated`,
+          go: () => { ledgerAdding = true; renderLedger(); } },
         { id: 'experience', label: 'An active experience', done: exps.some((x) => x.active),
-          hint: exps.length ? 'All experiences are paused' : 'Add an HTML experience', go: exps.length ? null : openDrawer },
+          hint: exps.length ? 'All experiences are paused' : 'Add an HTML experience', warn: 'No active experiences — nothing shows in the camera',
+          go: exps.length ? null : openDrawer },
       ];
     }
 
+    // Checklist until setup is done; the full dashboard once it is (or as soon as there is scan data).
     function renderDashboard() {
       if (!dashEl) return;
       const checks = dashboardChecks();
-      const doneCount = checks.filter((c) => c.done).length;
-      const ready = doneCount === checks.length;
-      const key = JSON.stringify([checks.map((c) => [c.done, c.hint]), ready && metrics.impressions]);
+      const ready = checks.every((c) => c.done);
+      const hasData = Object.values(events).some((e) => e.type === 'impression');
+      const full = !!card.target && (ready || hasData);
+      const today = new Date().toDateString();
+      const key = JSON.stringify([checks.map((c) => [c.done, c.hint]), full, eventsVersion, schedule, allocatedBps(), lastExpKey, today, !full && ready && metrics.impressions]);
       if (key === lastDashKey) return;
       lastDashKey = key;
 
       dashEl.replaceChildren();
+      dashEl.classList.toggle('full', full);
+      if (full) renderFullDashboard(dashboardModel(), checks);
+      else renderChecklist(checks, ready);
+      if (bounds.tree) layout();
+    }
+
+    function renderChecklist(checks, ready) {
+      const doneCount = checks.filter((c) => c.done).length;
       const head = Object.assign(document.createElement('div'), { className: 'dash-head' + (ready ? ' ready' : '') });
       head.append(
         Object.assign(document.createElement('span'), { textContent: 'Setup' }),
         Object.assign(document.createElement('span'), { className: 'status', textContent: ready ? 'Ready' : `${doneCount} of ${checks.length}` }),
       );
       dashEl.append(head);
-
       for (const c of checks) {
         const actionable = !c.done && c.go;
         const item = document.createElement(actionable ? 'button' : 'div');
@@ -1530,10 +1585,195 @@
           textContent: metrics.impressions ? `Collecting data · ${plural(metrics.impressions, 'impression')} so far` : 'Waiting for the first scan',
         }));
       }
-      if (bounds.tree) layout();
     }
 
-    /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
+    const timeLabel = (t) => (new Date(t).toDateString() === new Date().toDateString()
+      ? new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : fmtWhen(t));
+
+    // Which place an impression happened: the nearest location-based experience it falls inside, else Elsewhere.
+    function placeOf(e) {
+      if (e.lat == null) return 'No location';
+      let best = null, bestD = Infinity;
+      for (const x of Object.values(experiences)) {
+        if (x.lat == null) continue;
+        const d = distanceM(e, x);
+        if (d <= x.radius + Math.min(e.acc || 0, 100) && d < bestD) { best = x.title; bestD = d; }
+      }
+      return best || 'Elsewhere';
+    }
+
+    // Everything the dashboard shows, derived from the event log (synced across devices).
+    function dashboardModel() {
+      const list = Object.values(events).sort((a, b) => a.t - b.t);
+      const imps = list.filter((e) => e.type === 'impression');
+      const buys = list.filter((e) => e.type === 'purchase');
+      const ended = imps.filter((e) => e.dwellMs != null);
+      const revenue = buys.reduce((n, e) => n + (e.amountCents || 0), 0);
+      const model = {
+        updated: list.length ? list[list.length - 1].t : null,
+        kpis: [
+          ['Reach', String(new Set(imps.map((e) => e.device)).size)],
+          ['Impressions', String(imps.length)],
+          ['Hook rate', pct(rate(imps.filter((e) => e.viewed).length, imps.length))],
+          ['Avg watch', sec(rate(ended.reduce((n, e) => n + e.dwellMs, 0), ended.length))],
+          ['Purchases', String(buys.length)],
+          ['Revenue', fmtMoney(revenue)],
+        ],
+        pace: null,
+      };
+
+      if (schedule) {
+        const start = parseDay(schedule.start), end = parseDay(schedule.end);
+        const total = Math.round((end - start) / DAY_MS) + 1;
+        const now = new Date();
+        const day = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - start) / DAY_MS) + 1;
+        const bucketDays = total > 120 ? 7 : 1;
+        const counts = new Array(Math.ceil(total / bucketDays)).fill(0);
+        for (const e of imps) {
+          const d = Math.floor((e.t - start.getTime()) / DAY_MS);
+          if (d >= 0 && d < total) counts[Math.floor(d / bucketDays)]++;
+        }
+        const elapsed = Math.min(Math.max(day, 0), total);
+        const perDay = elapsed ? revenue / elapsed : 0;
+        model.pace = {
+          counts,
+          current: day >= 1 && day <= total ? Math.floor((day - 1) / bucketDays) : day > total ? counts.length : -1,
+          line: day < 1 ? `Starts in ${plural(1 - day, 'day')}`
+            : day > total ? `Ended · ${fmtMoney(revenue)} total`
+            : `${fmtMoney(Math.round(perDay))}/day · on pace for ${fmtMoney(Math.round(perDay * total))}`,
+          sub: elapsed ? `${(imps.length / elapsed).toFixed(1)} impressions/day · ${bucketDays === 7 ? 'bars are weeks' : 'bars are days'}` : '',
+          from: start.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+          to: end.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        };
+      }
+
+      const byExp = new Map();
+      const expRow = (id) => byExp.get(id) || byExp.set(id, { id, shows: 0, viewed: 0, buys: 0, revenue: 0 }).get(id);
+      for (const e of imps) { const r = expRow(e.exp || ''); r.shows++; if (e.viewed) r.viewed++; }
+      for (const e of buys) { const r = expRow(e.exp || ''); r.buys++; r.revenue += e.amountCents || 0; }
+      model.experiences = [...byExp.values()]
+        .sort((a, b) => b.revenue - a.revenue || b.shows - a.shows)
+        .slice(0, 6)
+        .map((r) => [r.id ? experiences[r.id]?.title || 'Deleted experience' : 'No experience', String(r.shows), pct(rate(r.viewed, r.shows)), String(r.buys), fmtMoney(r.revenue)]);
+
+      const places = new Map();
+      for (const e of imps) { const place = placeOf(e); places.set(place, (places.get(place) || 0) + 1); }
+      model.locations = [...places].sort((a, b) => b[1] - a[1]).map(([name, n]) => [name, rate(n, imps.length)]);
+
+      const owed = new Map();
+      let platform = 0, unallocated = 0;
+      for (const e of buys) {
+        const split = e.split || {};
+        platform += split.platformCents || 0;
+        unallocated += split.unallocatedCents || 0;
+        for (const x of split.shares || []) owed.set(x.name, (owed.get(x.name) || 0) + (x.cents || 0));
+      }
+      model.payouts = buys.length ? [
+        ...[...owed].sort((a, b) => b[1] - a[1]).map(([name, cents]) => ['', name, fmtMoney(cents)]),
+        ['fee', PLATFORM_NAME, fmtMoney(platform)],
+        ...(unallocated ? [['muted', 'Unallocated', fmtMoney(unallocated)]] : []),
+      ] : [];
+
+      const LABELS = { like: 'Like', save: 'Save', share: 'Share', follow: 'Follow', tap: 'Learn more', 'lean-in': 'Leaned in' };
+      model.recent = list.slice(-6).reverse().map((e) => {
+        let what = LABELS[e.type] || e.type;
+        if (e.type === 'impression') what = e.dwellMs != null ? `Seen ${sec(e.dwellMs)}` : 'In view now';
+        if (e.type === 'purchase') what = `Purchase ${fmtMoney(e.amountCents || 0)}`;
+        if (e.type === 'comment') what = `Comment “${e.text || ''}”`;
+        const title = e.exp ? experiences[e.exp]?.title : '';
+        return [timeLabel(e.t), title ? `${what} · ${title}` : what];
+      });
+      return model;
+    }
+
+    function renderFullDashboard(model, checks) {
+      const el = (tag, className, text) => Object.assign(document.createElement(tag), className ? { className } : {}, text != null ? { textContent: text } : {});
+      const section = (title) => { const s = el('div', 'dash-section'); s.append(el('h4', '', title)); dashEl.append(s); return s; };
+
+      const head = el('div', 'dash-head');
+      head.append(el('span', '', 'Overview'), el('span', 'status', model.updated ? `Updated ${timeLabel(model.updated)}` : 'Waiting for the first scan'));
+      dashEl.append(head);
+      for (const c of checks) if (!c.done) dashEl.append(el('div', 'dash-warn', c.warn));
+
+      const kpis = el('div', 'kpis');
+      for (const [label, value] of model.kpis) { const k = el('div', 'kpi'); k.append(el('span', '', label), el('b', '', value)); kpis.append(k); }
+      dashEl.append(kpis);
+
+      const pace = section('Pace');
+      if (model.pace) {
+        pace.append(el('div', 'pace-line', model.pace.line));
+        if (model.pace.sub) pace.append(el('div', 'pace-sub', model.pace.sub));
+        const bars = el('div', 'pace-bars');
+        const max = Math.max(1, ...model.pace.counts);
+        model.pace.counts.forEach((n, i) => {
+          const bar = el('i', i === model.pace.current ? 'today' : i > model.pace.current ? 'future' : '');
+          bar.style.height = `${Math.max(3, (n / max) * 100)}%`;
+          bar.title = plural(n, 'impression');
+          bars.append(bar);
+        });
+        const axis = el('div', 'pace-axis');
+        axis.append(el('span', '', model.pace.from), el('span', '', model.pace.to));
+        pace.append(bars, axis);
+      } else {
+        pace.append(el('div', 'dash-empty', 'Set campaign dates to see pace'));
+      }
+
+      const exps = section('Experiences');
+      if (model.experiences.length) {
+        const table = el('table', 'dash-table');
+        const headRow = el('tr');
+        ['', 'Seen', 'Hook', 'Buys', 'Revenue'].forEach((h) => headRow.append(el('th', '', h)));
+        table.append(headRow);
+        for (const cells of model.experiences) {
+          const tr = el('tr');
+          cells.forEach((c, i) => { const td = el('td', '', c); if (i === 0) td.title = c; tr.append(td); });
+          table.append(tr);
+        }
+        exps.append(table);
+      } else {
+        exps.append(el('div', 'dash-empty', 'No impressions yet'));
+      }
+
+      const locs = section('Locations');
+      if (model.locations.length) {
+        for (const [name, share] of model.locations) {
+          const row = el('div', 'share-row');
+          const bar = el('div', 'bar');
+          bar.append(Object.assign(el('i'), { style: `width:${(share * 100).toFixed(1)}%` }));
+          row.append(el('span', '', name), el('b', '', pct(share)), bar);
+          locs.append(row);
+        }
+      } else {
+        locs.append(el('div', 'dash-empty', 'No impressions yet'));
+      }
+
+      const pay = section('Payouts · owed');
+      if (model.payouts.length) {
+        for (const [kind, name, amount] of model.payouts) {
+          const row = el('div', 'pay-row' + (kind ? ' ' + kind : ''));
+          row.append(el('span', '', name), el('b', '', amount));
+          pay.append(row);
+        }
+      } else {
+        pay.append(el('div', 'dash-empty', 'No purchases yet'));
+      }
+
+      const recent = section('Recent');
+      if (model.recent.length) {
+        const feed = el('div', 'dash-feed');
+        for (const [when, what] of model.recent) {
+          const row = el('div');
+          row.append(el('time', '', when), el('span', '', what));
+          feed.append(row);
+        }
+        recent.append(feed);
+      } else {
+        recent.append(el('div', 'dash-empty', 'No activity yet'));
+      }
+    }
+
+    /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */    /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
     // Firebase web config (public by design; access is governed by database rules). Set to null to run on this device only.
     const FIREBASE_CONFIG = {
       apiKey: 'AIzaSyDNDSi6Ep3TDbELk5VHtya1p8jbCDMFW98',
@@ -1601,6 +1841,7 @@
       stakeholders = {};
       ledgerAdding = false;
       events = {};
+      eventsVersion++;
       try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); localStorage.removeItem(SCHED_KEY); localStorage.removeItem(LEDGER_KEY); localStorage.removeItem(EVENTS_KEY); } catch {}
       cardEl.classList.remove('seen');
       renderCard();
@@ -1675,6 +1916,7 @@
         api.onValue(roomRef('experiences'), (s) => applyExperiences(s.val()));
         api.onValue(roomRef('schedule'), (s) => applySchedule(s.val()));
         api.onValue(roomRef('ledger'), (s) => applyLedger(s.val()));
+        api.onValue(roomRef('events'), (s) => applyEvents(s.val()));
         updateSyncPill();
       } catch (err) {
         console.error('[sync]', err);
@@ -1683,7 +1925,7 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
