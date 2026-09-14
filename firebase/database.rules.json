@@ -3,29 +3,50 @@
     "demos": {
       "$room": {
         ".write": "auth != null && ((auth.token.email === 'OWNER_EMAIL' && auth.token.email_verified === true) || $room.beginsWith('test-'))",
-
         "people": {
-          ".read": "auth != null && ((auth.token.email === 'OWNER_EMAIL' && auth.token.email_verified === true) || $room.beginsWith('test-'))"
+          ".read": "auth != null && ((auth.token.email === 'OWNER_EMAIL' && auth.token.email_verified === true) || $room.beginsWith('test-'))",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['email', 'consentReceipt', 'device', 'updatedAt']) && newData.child('email').isString() && newData.child('email').val().length < 200 && newData.child('email').val().matches(/^[^@ ]+@[^@ ]+[.][^@ ]+$/) && newData.child('consentReceipt').val() === true"
+          }
         },
-
-        "photo": { ".read": "auth != null" },
-        "target": { ".read": "auth != null" },
-        "title": { ".read": "auth != null" },
-        "schedule": { ".read": "auth != null" },
-        "ledger": { ".read": "auth != null" },
-
+        "photo": {
+          ".read": "auth != null"
+        },
+        "target": {
+          ".read": "auth != null"
+        },
+        "title": {
+          ".read": "auth != null"
+        },
+        "schedule": {
+          ".read": "auth != null"
+        },
+        "ledger": {
+          ".read": "auth != null"
+        },
         "experiences": {
           ".read": "auth != null",
           "$exp": {
-            "plays": { ".write": "auth != null" },
-            "lastPlayedAt": { ".write": "auth != null" },
-            "history": { ".write": "auth != null" }
+            "plays": {
+              ".write": "auth != null"
+            },
+            "lastPlayedAt": {
+              ".write": "auth != null"
+            },
+            "history": {
+              ".write": "auth != null"
+            }
           }
         },
-
-        "metrics": { ".read": "auth != null", ".write": "auth != null" },
-        "live": { ".read": "auth != null", ".write": "auth != null" },
-
+        "metrics": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "live": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
         "events": {
           ".read": "auth != null",
           "$event": {

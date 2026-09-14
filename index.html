@@ -205,15 +205,17 @@
     .tier.engaged { background: #8a8a82; }
     .tier.viewer { background: #c4c4bc; }
     .consumer { border-top: 1px solid #ecebe6; }
-    .consumer-row { display: grid; grid-template-columns: 8px 62px 1fr auto; gap: 8px; align-items: center; width: 100%; padding: 6px 0;
+    .consumer-row { display: grid; grid-template-columns: 8px minmax(62px, 150px) 1fr auto; gap: 8px; align-items: center; width: 100%; padding: 6px 0;
       background: none; text-align: left; font-size: 12.5px; color: var(--ink); cursor: pointer; }
     .consumer-row:hover .consumer-id { text-decoration: underline; text-underline-offset: 2px; }
-    .consumer-id { font-weight: 560; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .consumer-id { font-weight: 560; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .id-badge { margin-left: 3px; font-size: 10.5px; color: var(--muted); font-weight: 400; }
     .consumer-meta { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .consumer-spend { font-variant-numeric: tabular-nums; }
     .consumer-detail { padding: 0 0 12px 16px; }
     .consumer-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; margin: 2px 0 8px; font-size: 10.5px; color: #a3a39b; }
-    .consumer-facts b { display: block; font-size: 12.5px; font-weight: 560; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .consumer-facts b { display: block; font-size: 12.5px; font-weight: 560; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .consumer-facts .wide { grid-column: 1 / -1; }
     .cg { display: block; overflow: visible; }
     .cg .edge { fill: none; stroke: #cfcfc7; stroke-width: 1.25; }
     .cg .edge.bought { stroke: #1d1d1b; stroke-width: 2; }
@@ -359,6 +361,21 @@
     .rp-foot { margin: 4px 0 0; font-size: 12px; color: var(--rp-muted); text-align: center; }
     .rp-tip { position: fixed; z-index: 45; pointer-events: none; background: #0b0b0b; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
 
+    /* ---------- Identity sheet (opt-in receipt after a purchase) ---------- */
+    #identifySheet { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5; max-width: 460px; margin: 0 auto;
+      display: grid; gap: 8px; padding: 16px; border-radius: 16px; background: var(--card); color: var(--ink); box-shadow: 0 12px 36px rgba(0,0,0,.4); animation: sheetIn .25s ease-out; }
+    #identifySheet b { font-size: 16px; }
+    #identifySheet .sheet-sub, #identifySheet small { margin: 0; font-size: 12px; color: var(--muted); }
+    #identifySheet input[type=email], #identifySheet input[type=tel] { font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+    #identifySheet label { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+    #identifySheet label input { margin-top: 2px; }
+    .sheet-actions { display: flex; align-items: center; gap: 14px; }
+    .sheet-actions .skip { background: none; color: var(--muted); padding: 8px 0; }
+    .sheet-error { min-height: 1em; font-size: 12px; color: #c0392b; }
+    .scan-toast { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top)); translate: -50% 0; z-index: 6; padding: 8px 14px; border-radius: 999px;
+      background: var(--ok); color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; }
+    @keyframes sheetIn { from { transform: translateY(20px); opacity: 0; } }
+
     /* While scanning, the camera is fullscreen (no split screen). */
     body.scanning .topbar { display: none; }
     @media print {
@@ -466,6 +483,18 @@
     <button class="cta" data-act="tap" id="cta"><span>Learn more</span><span>›</span></button>
     <button class="buy" id="buyBtn" type="button" hidden>Buy</button>
     <div class="scan-status" id="scanStatus"><img id="scanThumb" alt=""><span id="scanText">Starting camera…</span></div>
+    <form id="identifySheet" hidden novalidate>
+      <b>Email my receipt</b>
+      <p class="sheet-sub">For your <span id="idPurchase">purchase</span>. Demo — no email is actually sent.</p>
+      <input type="email" id="idEmail" placeholder="you@example.com" autocomplete="email" inputmode="email" aria-label="Email">
+      <input type="tel" id="idPhone" placeholder="Mobile (optional)" autocomplete="tel" aria-label="Mobile number (optional)">
+      <label><input type="checkbox" id="idConsent"> Email me this receipt and keep it with my purchases</label>
+      <label><input type="checkbox" id="idMarketing"> Also send me offers by email or text (optional)</label>
+      <div class="sheet-error" id="idError"></div>
+      <div class="sheet-actions"><button class="btn" type="submit">Send receipt</button><button class="skip" type="button" id="idSkip">No thanks</button></div>
+      <small>Used only for this receipt and any offers you opt into. The organizer can delete it anytime.</small>
+    </form>
+    <div class="scan-toast" id="scanToast" hidden></div>
     <form id="commentBar" hidden>
       <input id="commentInput" placeholder="Add a comment…" autocomplete="off" enterkeyhint="send">
       <button type="submit">Post</button>
@@ -1503,6 +1532,7 @@
       saveMetrics();
       renderMetrics();
       updateBuy();
+      maybeAskIdentity(amountCents);
     });
     $('expClose').onclick = () => { hideExperience(); pushLive(true); };
 
@@ -2397,6 +2427,71 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && reportOpen() && !$('drawer').classList.contains('open')) closeReport(); });
     addEventListener('resize', scheduleReport);
 
+    /* ---------------- Identity: opt-in email / phone after a purchase ---------------- */
+    // Saved under people/<auth uid>: a visitor can write only their own record, and only the owner can read people.
+    const IDENTITY_KEY = 'contextCanvas.identity';
+    let people = {}, peopleVersion = 0, peopleUnsub = null, pendingPurchase = null;
+    const identityLocal = () => { try { return JSON.parse(localStorage.getItem(IDENTITY_KEY)) || null; } catch { return null; } };
+
+    function showToast(text) {
+      const toast = $('scanToast');
+      toast.textContent = text;
+      toast.hidden = false;
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => { toast.hidden = true; }, 2200);
+    }
+
+    function maybeAskIdentity(amountCents) {
+      if (identityLocal()) { showToast('Receipt sent · demo'); return; }   // this phone already shared an email
+      const title = currentExp?.title || '';
+      pendingPurchase = { amountCents, exp: currentExp?.id || imp?.expId || null, title, t: Date.now() };
+      $('identifySheet').reset();
+      $('idError').textContent = '';
+      $('idPurchase').textContent = `${fmtMoney(amountCents)} purchase${title ? ' — ' + title : ''}`;
+      $('identifySheet').hidden = false;
+    }
+
+    $('idSkip').onclick = () => { $('identifySheet').hidden = true; pendingPurchase = null; };
+    $('identifySheet').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = $('idEmail').value.trim().toLowerCase(), phone = $('idPhone').value.trim();
+      const error = (message) => { $('idError').textContent = message; };
+      error('');
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200) return error('Enter a valid email');
+      if (phone && !/^\+?[\d\s().-]{7,20}$/.test(phone)) return error('Enter a valid mobile number, or leave it blank');
+      if (!$('idConsent').checked) return error('Tick the box to get your receipt');
+      const now = Date.now();
+      const record = {
+        email, consentReceipt: true, consentMarketing: $('idMarketing').checked, device: deviceId, updatedAt: now, source: 'receipt',
+        ...(phone ? { phone } : {}),
+        ...(pendingPurchase ? { lastPurchase: Object.fromEntries(Object.entries(pendingPurchase).filter(([, v]) => v !== null && v !== '')) } : {}),
+      };
+      const uid = session.user?.uid;
+      try {
+        if (sync.on && uid) await sync.api.set(roomRef(`people/${uid}`), record);
+        else { people[uid || deviceId] = record; peopleVersion++; }
+      } catch (err) {
+        console.error('[identity]', err);
+        return error("Couldn't save right now — please try again");
+      }
+      try { localStorage.setItem(IDENTITY_KEY, JSON.stringify({ at: now })); } catch {}
+      // Everyone can see that this device identified (no email in the shared event log).
+      writeEvent(newEventId(), { type: 'identify', t: now, device: deviceId, exp: pendingPurchase?.exp, marketing: record.consentMarketing });
+      $('identifySheet').hidden = true;
+      pendingPurchase = null;
+      showToast('Receipt sent · demo');
+    });
+
+    function listenPeople() {
+      if (peopleUnsub || !sync.on || !isOwner) return;
+      peopleUnsub = sync.api.onValue(roomRef('people'), (snap) => { people = snap.val() || {}; peopleVersion++; renderGraph(); },
+        (err) => { peopleUnsub = null; people = {}; peopleVersion++; console.warn('[sync] people not readable', err?.code || err); renderGraph(); });
+    }
+    function stopPeople() {
+      if (peopleUnsub) { peopleUnsub(); peopleUnsub = null; }
+      if (Object.keys(people).length) { people = {}; peopleVersion++; renderGraph(); }
+    }
+
     /* ---------------- Graph: anonymous consumers (one per scanning device) ---------------- */
     // Built from the synced event log. Identity (email/phone) joins these rows in a later stage.
     const graphExpanded = new Set();
@@ -2412,17 +2507,20 @@
     }
 
     function consumersModel() {
+      const blank = (device) => ({
+        devices: [device], first: Infinity, last: 0, scans: 0, viewed: 0, dwell: 0, dwellN: 0,
+        actions: {}, objects: new Map(), spend: 0, buys: 0, places: new Map(), exps: new Map(),
+      });
+      const expOf = (c, key) => c.exps.get(key) || c.exps.set(key, { id: key, seen: 0, buys: 0, cents: 0, objects: new Set() }).get(key);
       const byDevice = new Map();
+      const identified = new Set();
       for (const e of Object.values(events)) {
         if (!e.device) continue;
-        const c = byDevice.get(e.device) || byDevice.set(e.device, {
-          device: e.device, first: Infinity, last: 0, scans: 0, viewed: 0, dwell: 0, dwellN: 0,
-          actions: {}, objects: new Map(), spend: 0, buys: 0, places: new Map(), exps: new Map(),
-        }).get(e.device);
+        if (e.type === 'identify') { identified.add(e.device); continue; }
+        const c = byDevice.get(e.device) || byDevice.set(e.device, blank(e.device)).get(e.device);
         c.first = Math.min(c.first, e.t);
         c.last = Math.max(c.last, e.end || e.t);
-        const key = e.exp || '';
-        const ex = c.exps.get(key) || c.exps.set(key, { id: key, seen: 0, buys: 0, cents: 0, objects: new Set() }).get(key);
+        const ex = expOf(c, e.exp || '');
         if (e.type === 'impression') {
           c.scans++; ex.seen++;
           if (e.viewed) c.viewed++;
@@ -2438,13 +2536,35 @@
           c.actions[e.type] = (c.actions[e.type] || 0) + 1;
         }
       }
-      return [...byDevice.values()].map((c) => {
+
+      // The owner can read people: devices that shared the same email become one person.
+      const personByDevice = new Map(Object.values(people).filter((x) => x?.device).map((x) => [x.device, x]));
+      const groups = new Map();
+      for (const [device, c] of byDevice) {
+        const key = personByDevice.get(device)?.email || device;
+        const into = groups.get(key);
+        if (!into) { groups.set(key, c); continue; }
+        into.first = Math.min(into.first, c.first); into.last = Math.max(into.last, c.last);
+        for (const k of ['scans', 'viewed', 'dwell', 'dwellN', 'spend', 'buys']) into[k] += c[k];
+        for (const [k, v] of Object.entries(c.actions)) into.actions[k] = (into.actions[k] || 0) + v;
+        for (const [k, v] of c.objects) into.objects.set(k, (into.objects.get(k) || 0) + v);
+        for (const [k, v] of c.places) into.places.set(k, (into.places.get(k) || 0) + v);
+        for (const [k, x] of c.exps) { const t = expOf(into, k); t.seen += x.seen; t.buys += x.buys; t.cents += x.cents; x.objects.forEach((o) => t.objects.add(o)); }
+        into.devices.push(...c.devices);
+      }
+
+      return [...groups].map(([key, c]) => {
         const taps = [...c.objects.values()].reduce((n, v) => n + v, 0);
         const actionCount = Object.values(c.actions).reduce((n, v) => n + v, 0);
+        // Merged devices: the most recently updated record has the freshest mobile / consent.
+        const person = c.devices.map((d) => personByDevice.get(d)).filter(Boolean).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null;
         return {
-          ...c, taps, actionCount,
+          ...c, key, taps, actionCount, person,
+          identified: !!person || c.devices.some((d) => identified.has(d)),
+          identifiedDevices: c.devices.filter((d) => personByDevice.has(d) || identified.has(d)).length,
           tier: c.spend ? 'buyer' : taps || actionCount ? 'engaged' : 'viewer',
-          label: '·' + c.device.slice(-4).toUpperCase(),
+          label: person?.email || '·' + c.devices[0].slice(-4).toUpperCase(),
+          deviceLabels: c.devices.map((d) => '·' + d.slice(-4).toUpperCase()),
           topPlace: [...c.places].sort((a, b) => b[1] - a[1])[0]?.[0] || 'No location',
           seenExps: [...c.exps.values()].filter((x) => x.id && (x.seen || x.buys || x.objects.size)),
         };
@@ -2453,7 +2573,7 @@
 
     function renderGraph() {
       if (!graphEl) return;
-      const key = JSON.stringify([eventsVersion, [...graphExpanded], lastExpKey, deviceId]);
+      const key = JSON.stringify([eventsVersion, peopleVersion, isOwner, [...graphExpanded], lastExpKey, deviceId]);
       if (key === lastGraphKey) return;
       lastGraphKey = key;
 
@@ -2462,7 +2582,9 @@
       graphEl.replaceChildren();
 
       const head = el('div', 'graph-head');
-      head.append(el('span', '', consumers.length ? `Consumers · ${plural(consumers.length, 'device')}` : 'Consumers'));
+      const identifiedCount = consumers.reduce((n, c) => n + c.identifiedDevices, 0);   // same count for owner and viewers
+      const deviceCount = consumers.reduce((n, c) => n + c.devices.length, 0);
+      head.append(el('span', '', consumers.length ? `Consumers · ${plural(deviceCount, 'device')}${identifiedCount ? ` · ${identifiedCount} identified` : ''}` : 'Consumers'));
       const legend = el('span', 'graph-legend');
       for (const [id, name] of Object.entries(TIERS)) { const item = el('span'); item.append(el('i', `tier ${id}`), document.createTextNode(name)); legend.append(item); }
       head.append(legend);
@@ -2475,13 +2597,15 @@
         const wrap = el('div', 'consumer');
         const row = el('button', 'consumer-row');
         row.type = 'button';
-        row.setAttribute('aria-expanded', String(graphExpanded.has(c.device)));
-        row.onclick = () => { graphExpanded.has(c.device) ? graphExpanded.delete(c.device) : graphExpanded.add(c.device); renderGraph(); layout(); };
-        const meta = [c.topPlace, plural(c.scans, 'scan'), c.taps ? plural(c.taps, 'tap') : ''].filter(Boolean).join(' · ');
-        row.append(el('i', `tier ${c.tier}`), el('span', 'consumer-id', c.label + (c.device === deviceId ? ' (you)' : '')), el('span', 'consumer-meta', meta), el('span', 'consumer-spend', c.spend ? fmtMoney(c.spend) : '—'));
-        row.title = `${TIERS[c.tier]} · device ${c.device}`;
+        row.setAttribute('aria-expanded', String(graphExpanded.has(c.key)));
+        row.onclick = () => { graphExpanded.has(c.key) ? graphExpanded.delete(c.key) : graphExpanded.add(c.key); renderGraph(); layout(); };
+        const meta = [c.topPlace, plural(c.scans, 'scan'), c.taps ? plural(c.taps, 'tap') : '', c.devices.length > 1 ? plural(c.devices.length, 'device') : ''].filter(Boolean).join(' · ');
+        const id = el('span', 'consumer-id', c.label + (c.devices.includes(deviceId) ? ' (you)' : ''));
+        if (c.identified && !c.person) id.append(el('span', 'id-badge', '✉'));
+        row.append(el('i', `tier ${c.tier}`), id, el('span', 'consumer-meta', meta), el('span', 'consumer-spend', c.spend ? fmtMoney(c.spend) : '—'));
+        row.title = `${TIERS[c.tier]}${c.identified ? ' · identified' : ''} · ${c.deviceLabels.join(', ')}`;
         wrap.append(row);
-        if (graphExpanded.has(c.device)) wrap.append(consumerDetail(c, el));
+        if (graphExpanded.has(c.key)) wrap.append(consumerDetail(c, el));
         graphEl.append(wrap);
       }
       if (consumers.length > 12) graphEl.append(el('div', 'dash-empty', `+ ${consumers.length - 12} more devices`));
@@ -2491,7 +2615,15 @@
     function consumerDetail(c, el) {
       const detail = el('div', 'consumer-detail');
       const facts = el('div', 'consumer-facts');
-      const fact = (label, value) => { const f = el('span', '', label); f.append(el('b', '', value)); facts.append(f); };
+      const fact = (label, value, wide) => { const f = el('span', wide ? 'wide' : '', label); f.append(el('b', '', value)); facts.append(f); };
+      if (c.person) {
+        fact('Email', c.person.email, true);
+        fact('Mobile', c.person.phone || '—');
+        fact('Offers', c.person.consentMarketing ? 'Opted in' : 'No');
+      } else if (c.identified) {
+        fact('Identity', 'Shared an email');
+      }
+      if (c.devices.length > 1) fact('Devices', c.deviceLabels.join(', '));
       fact('First seen', timeLabel(c.first));
       fact('Last seen', timeLabel(c.last));
       fact('Places', [...c.places.keys()].join(', ') || '—');
@@ -2605,7 +2737,9 @@
       ledgerAdding = false;
       events = {};
       eventsVersion++;
-      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); localStorage.removeItem(SCHED_KEY); localStorage.removeItem(LEDGER_KEY); localStorage.removeItem(EVENTS_KEY); } catch {}
+      people = {};
+      peopleVersion++;
+      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); localStorage.removeItem(SCHED_KEY); localStorage.removeItem(LEDGER_KEY); localStorage.removeItem(EVENTS_KEY); localStorage.removeItem(IDENTITY_KEY); } catch {}
       cardEl.classList.remove('seen');
       renderCard();
       renderMetrics(false);
@@ -2684,6 +2818,7 @@
         listen('schedule', applySchedule);
         listen('ledger', applyLedger);
         listen('events', applyEvents);
+        if (isOwner) listenPeople();
         updateSyncPill();
       } catch (err) {
         console.error('[sync]', err);
@@ -2718,6 +2853,7 @@
     function applyRole(owner) {
       isOwner = owner;
       document.body.classList.toggle('viewer', !owner);
+      if (owner) listenPeople(); else stopPeople();
       $('title').contentEditable = String(owner);
       if (!owner) { closeDrawer(); schedEditing = false; ledgerAdding = false; renderSchedule(); renderLedger(); }
       const btn = $('ownerBtn'), user = session.user, signedIn = !!user && !user.isAnonymous;
@@ -2743,7 +2879,7 @@
     };
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, getPeople: () => people, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
 
     buildTree();
     renderCard();
