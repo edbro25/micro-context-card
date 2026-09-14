@@ -95,6 +95,20 @@
     .exp-link { background: none; padding: 4px 0; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
     .exp-empty { color: #a3a39b; font-size: 12px; padding: 2px 0 4px; }
 
+    /* ---------- Schedule spoke (above the card) ---------- */
+    .sched { position: absolute; width: 320px; text-align: center; font-size: 12.5px; color: var(--muted); }
+    .sched-dates { color: var(--ink); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .sched-bar { width: 180px; height: 2px; margin: 7px auto 5px; background: var(--line); border-radius: 2px; overflow: hidden; }
+    .sched-bar i { display: block; height: 100%; background: var(--ink); }
+    .sched-meta { font-size: 11.5px; }
+    .sched-form { display: grid; gap: 6px; justify-items: center; }
+    .sched-inputs { display: flex; gap: 8px; }
+    .sched-inputs label { display: grid; gap: 2px; font-size: 11px; color: #a3a39b; text-align: left; }
+    .sched-inputs input { font: inherit; font-size: 16px; color: var(--ink); padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+    .sched-actions { display: flex; align-items: center; gap: 12px; }
+    .sched-error { color: #c0392b; font-size: 11.5px; }
+    .btn.sm { padding: 5px 12px; font-size: 12.5px; }
+
     /* ---------- Add-experience drawer (sidebar on desktop, pop-out on mobile) ---------- */
     #drawerScrim { position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,.18); }
     #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 92vw); z-index: 30; background: var(--card);
@@ -346,9 +360,9 @@
 
     /* ---------------- Statistics spoke: build, lay out, render ---------------- */
     const tree = $('tree'), links = $('links'), cardEl = $('card');
-    const SPOKE_GAP = 14, SPOKE_LEN = 110, LABEL_GAP = 10, STATS_GAP = 28;
+    const SPOKE_GAP = 14, SPOKE_LEN = 110, TOP_SPOKE_LEN = 56, LABEL_GAP = 10, STATS_GAP = 28;
     let bounds = { tree: null, root: null };
-    let statsEl, spokeLabel, expLabel, expList;
+    let statsEl, spokeLabel, expLabel, expList, schedLabel, schedEl;
 
     function buildTree() {
       spokeLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Statistics' });
@@ -366,16 +380,20 @@
       }
       expLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Experiences' });
       expList = Object.assign(document.createElement('div'), { className: 'exp-list' });
-      tree.append(spokeLabel, statsEl, expLabel, expList);
+      schedLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Schedule' });
+      schedEl = Object.assign(document.createElement('div'), { className: 'sched' });
+      tree.append(spokeLabel, statsEl, expLabel, expList, schedLabel, schedEl);
     }
 
-    // Stats ← "Statistics" • ··· card ··· • "Experiences" → experiences list, all centered on the card.
+    // Spokes from the card: Schedule above, Statistics left, Experiences right; content sits beyond each label.
     function layout() {
       const cardLeft = -cardEl.offsetWidth / 2, cardTop = -cardEl.offsetHeight / 2;
       const lineStart = cardLeft - SPOKE_GAP, dotX = lineStart - SPOKE_LEN;
       const rStart = -cardLeft + SPOKE_GAP, rDot = rStart + SPOKE_LEN;
+      const tStart = cardTop - SPOKE_GAP, tDot = tStart - TOP_SPOKE_LEN;
       links.innerHTML = `<path id="link-stats" d="M${lineStart} 0 H${dotX}"/><circle cx="${dotX}" cy="0" r="2.5"/>`
-        + `<path id="link-exp" d="M${rStart} 0 H${rDot}"/><circle cx="${rDot}" cy="0" r="2.5"/>`;
+        + `<path id="link-exp" d="M${rStart} 0 H${rDot}"/><circle cx="${rDot}" cy="0" r="2.5"/>`
+        + `<path id="link-sched" d="M0 ${tStart} V${tDot}"/><circle cx="0" cy="${tDot}" r="2.5"/>`;
 
       const labelLeft = dotX - LABEL_GAP - spokeLabel.offsetWidth;
       spokeLabel.style.left = labelLeft + 'px';
@@ -393,8 +411,16 @@
       expList.style.left = expLeft + 'px';
       expList.style.top = expTop + 'px';
 
-      const top = Math.min(cardTop, statsTop, expTop);
-      bounds.tree = { x: statsLeft, y: top, w: expLeft + expList.offsetWidth - statsLeft, h: -2 * top };
+      const schedLabelCenter = tDot - LABEL_GAP - schedLabel.offsetHeight / 2;
+      schedLabel.style.left = -schedLabel.offsetWidth / 2 + 'px';
+      schedLabel.style.top = schedLabelCenter + 'px';
+      const schedTop = schedLabelCenter - schedLabel.offsetHeight / 2 - 12 - schedEl.offsetHeight;
+      schedEl.style.left = -schedEl.offsetWidth / 2 + 'px';
+      schedEl.style.top = schedTop + 'px';
+
+      const top = Math.min(cardTop, statsTop, expTop, schedTop);
+      const bottom = Math.max(-cardTop, -statsTop, expTop + expList.offsetHeight);
+      bounds.tree = { x: statsLeft, y: top, w: expLeft + expList.offsetWidth - statsLeft, h: bottom - top };
       bounds.root = { x: cardLeft, y: cardTop, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
     }
 
@@ -856,6 +882,84 @@
     $('closeScan').onclick = closeScanner;
     document.addEventListener('visibilitychange', () => { if (document.hidden && stream) closeScanner(); });
 
+    /* ---------------- Schedule: overall campaign dates ---------------- */
+    const SCHED_KEY = 'contextCanvas.schedule.v1';
+    const DAY_MS = 86400000;
+    let schedule = (({ start, end }) => (start && end ? { start, end } : null))(loadJSON(SCHED_KEY));
+    let schedEditing = false;
+
+    const parseDay = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    function saveScheduleLocal() {
+      try { schedule ? localStorage.setItem(SCHED_KEY, JSON.stringify(schedule)) : localStorage.removeItem(SCHED_KEY); } catch {}
+    }
+    const linkButton = (text, onclick) => Object.assign(document.createElement('button'), { className: 'exp-link', type: 'button', textContent: text, onclick });
+
+    function renderSchedule() {
+      schedEl.replaceChildren();
+      if (schedEditing) schedEl.append(scheduleForm());
+      else if (schedule) schedEl.append(...scheduleSummary());
+      else schedEl.append(linkButton('+ Set campaign dates', () => { schedEditing = true; renderSchedule(); }));
+      if (bounds.tree) layout();
+    }
+
+    function scheduleSummary() {
+      const start = parseDay(schedule.start), end = parseDay(schedule.end);
+      const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const total = Math.round((end - start) / DAY_MS) + 1;
+      const day = Math.round((today - start) / DAY_MS) + 1;
+      const fmt = (d, year) => d.toLocaleDateString([], { month: 'short', day: 'numeric', ...(year ? { year: 'numeric' } : {}) });
+      const duration = total >= 45 ? `≈${Math.round(total / 30.44)} months` : plural(total, 'day');
+      let status, progress;
+      if (day < 1) { status = `Starts in ${plural(1 - day, 'day')}`; progress = 0; }
+      else if (day > total) { status = `Ended ${plural(day - total, 'day')} ago`; progress = 1; }
+      else { status = `Day ${day} of ${total} · ${plural(total - day, 'day')} left`; progress = day / total; }
+
+      const dates = Object.assign(document.createElement('div'), {
+        className: 'sched-dates', textContent: `${fmt(start, start.getFullYear() !== end.getFullYear())} – ${fmt(end, true)}`,
+      });
+      const bar = Object.assign(document.createElement('div'), { className: 'sched-bar' });
+      bar.append(Object.assign(document.createElement('i'), { style: `width:${(progress * 100).toFixed(1)}%` }));
+      const meta = Object.assign(document.createElement('div'), { className: 'sched-meta', textContent: `${duration} · ${status}` });
+      return [dates, bar, meta, linkButton('Edit', () => { schedEditing = true; renderSchedule(); })];
+    }
+
+    function scheduleForm() {
+      const form = Object.assign(document.createElement('form'), { className: 'sched-form', noValidate: true });
+      form.innerHTML = `<div class="sched-inputs">
+          <label>Start<input type="date" name="start"></label>
+          <label>End<input type="date" name="end"></label>
+        </div>
+        <div class="sched-error"></div>
+        <div class="sched-actions"><button class="btn sm" type="submit">Save</button></div>`;
+      const { start, end } = form.elements;
+      start.value = schedule?.start || '';
+      end.value = schedule?.end || '';
+      form.querySelector('.sched-actions').append(linkButton('Cancel', () => { schedEditing = false; renderSchedule(); }));
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const error = form.querySelector('.sched-error');
+        if (!start.value || !end.value) { error.textContent = 'Pick a start and end date'; return; }
+        if (end.value <= start.value) { error.textContent = 'End must be after start'; return; }
+        schedule = { start: start.value, end: end.value };
+        schedEditing = false;
+        saveScheduleLocal();
+        put('schedule', { ...schedule, by: clientId });
+        renderSchedule();
+      });
+      return form;
+    }
+
+    function applySchedule(v) {
+      if (v?.by === clientId) return;
+      schedule = v?.start && v?.end ? { start: v.start, end: v.end } : null;
+      saveScheduleLocal();
+      if (!schedEditing) renderSchedule();
+    }
+
+    // Keep "Day N of N" current across midnight.
+    setInterval(() => { if (schedule && !schedEditing) renderSchedule(); }, 60000);
+
     /* ---------------- Experiences: HTML shown in the camera, by location and time ---------------- */
     const EXP_KEY = 'contextCanvas.experiences.v1';
     const MAX_HTML_BYTES = 300 * 1024;
@@ -1164,11 +1268,14 @@
       lastTarget = null;
       experiences = {};
       expanded.clear();
-      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); } catch {}
+      schedule = null;
+      schedEditing = false;
+      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); localStorage.removeItem(SCHED_KEY); } catch {}
       cardEl.classList.remove('seen');
       renderCard();
       renderMetrics(false);
       renderExperiences();
+      renderSchedule();
       fit();
     }
     function resetEverything() {
@@ -1234,6 +1341,7 @@
         api.onValue(roomRef('metrics'), (s) => applyMetrics(s.val()));
         api.onValue(roomRef('live'), (s) => applyLive(s.val()));
         api.onValue(roomRef('experiences'), (s) => applyExperiences(s.val()));
+        api.onValue(roomRef('schedule'), (s) => applySchedule(s.val()));
         updateSyncPill();
       } catch (err) {
         console.error('[sync]', err);
@@ -1242,12 +1350,13 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
     renderMetrics(false);
     renderExperiences();
+    renderSchedule();
     layout();
     fit();
     document.fonts?.ready.then(() => { layout(); if (!userPanned) fit(); });
