@@ -195,6 +195,35 @@
     .dash-feed span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .dash-empty { font-size: 11.5px; color: #a3a39b; }
 
+    /* ---------- Graph spoke (below the card): anonymous consumers ---------- */
+    .graph { position: absolute; width: 340px; font-size: 12.5px; color: var(--muted); }
+    .graph-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 11.5px; margin-bottom: 4px; }
+    .graph-legend { display: flex; gap: 10px; font-size: 10.5px; }
+    .graph-legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .tier { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .tier.buyer { background: #1d1d1b; }
+    .tier.engaged { background: #8a8a82; }
+    .tier.viewer { background: #c4c4bc; }
+    .consumer { border-top: 1px solid #ecebe6; }
+    .consumer-row { display: grid; grid-template-columns: 8px 62px 1fr auto; gap: 8px; align-items: center; width: 100%; padding: 6px 0;
+      background: none; text-align: left; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+    .consumer-row:hover .consumer-id { text-decoration: underline; text-underline-offset: 2px; }
+    .consumer-id { font-weight: 560; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .consumer-meta { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .consumer-spend { font-variant-numeric: tabular-nums; }
+    .consumer-detail { padding: 0 0 12px 16px; }
+    .consumer-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; margin: 2px 0 8px; font-size: 10.5px; color: #a3a39b; }
+    .consumer-facts b { display: block; font-size: 12.5px; font-weight: 560; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .cg { display: block; overflow: visible; }
+    .cg .edge { fill: none; stroke: #cfcfc7; stroke-width: 1.25; }
+    .cg .edge.bought { stroke: #1d1d1b; stroke-width: 2; }
+    .cg .node-device { fill: #1d1d1b; }
+    .cg .node-exp { fill: #fff; stroke: #1d1d1b; stroke-width: 1.5; }
+    .cg .node-exp.bought { fill: #1d1d1b; }
+    .cg .node-obj { fill: #a3a39b; }
+    .cg text { font-size: 11px; fill: #1d1d1b; }
+    .cg text.muted { fill: #74746c; }
+
     /* ---------- Add-experience drawer (sidebar on desktop, pop-out on mobile) ---------- */
     #drawerScrim { position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,.18); }
     #drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 92vw); z-index: 30; background: var(--card);
@@ -538,7 +567,7 @@
     const tree = $('tree'), links = $('links'), cardEl = $('card');
     const SPOKE_GAP = 14, SPOKE_LEN = 110, TOP_SPOKE_LEN = 56, DIAG_SPOKE_LEN = 72, LABEL_GAP = 10, STATS_GAP = 28;
     let bounds = { tree: null, root: null };
-    let statsEl, spokeLabel, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl, dashLabel, dashEl;
+    let statsEl, spokeLabel, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl, dashLabel, dashEl, graphLabel, graphEl;
 
     function buildTree() {
       spokeLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Statistics' });
@@ -562,10 +591,12 @@
       ledgerEl = Object.assign(document.createElement('div'), { className: 'ledger' });
       dashLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Dashboard' });
       dashEl = Object.assign(document.createElement('div'), { className: 'dash' });
-      tree.append(spokeLabel, statsEl, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl, dashLabel, dashEl);
+      graphLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Graph' });
+      graphEl = Object.assign(document.createElement('div'), { className: 'graph' });
+      tree.append(spokeLabel, statsEl, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl, dashLabel, dashEl, graphLabel, graphEl);
     }
 
-    // Spokes from the card: Ledger top-left, Schedule above, Experiences top-right, Statistics left, Dashboard right.
+    // Spokes from the card: Ledger top-left, Schedule above, Experiences top-right, Statistics left, Dashboard right, Graph below.
     function layout() {
       const cardLeft = -cardEl.offsetWidth / 2, cardTop = -cardEl.offsetHeight / 2;
       const lineStart = cardLeft - SPOKE_GAP, dotX = lineStart - SPOKE_LEN;
@@ -624,9 +655,19 @@
       dashEl.style.left = dashLeft + 'px';
       dashEl.style.top = dashTop + 'px';
 
-      const minX = Math.min(statsLeft, ledgerLeft), maxX = Math.max(expRight, dashLeft + dashEl.offsetWidth);
+      // Graph: straight down from the card, centered under it.
+      const gStart = -cardTop + SPOKE_GAP, gDot = gStart + TOP_SPOKE_LEN;
+      links.insertAdjacentHTML('beforeend', `<path id="link-graph" d="M0 ${gStart} V${gDot}"/><circle cx="0" cy="${gDot}" r="2.5"/>`);
+      const graphLabelCenter = gDot + LABEL_GAP + graphLabel.offsetHeight / 2;
+      graphLabel.style.left = -graphLabel.offsetWidth / 2 + 'px';
+      graphLabel.style.top = graphLabelCenter + 'px';
+      const graphLeft = -graphEl.offsetWidth / 2, graphTop = graphLabelCenter + graphLabel.offsetHeight / 2 + 12;
+      graphEl.style.left = graphLeft + 'px';
+      graphEl.style.top = graphTop + 'px';
+
+      const minX = Math.min(statsLeft, ledgerLeft, graphLeft), maxX = Math.max(expRight, dashLeft + dashEl.offsetWidth, -graphLeft);
       const top = Math.min(cardTop, statsTop, expTop, schedTop, ledgerTop, dashTop);
-      const bottom = Math.max(-cardTop, -statsTop, dashTop + dashEl.offsetHeight);
+      const bottom = Math.max(-cardTop, -statsTop, dashTop + dashEl.offsetHeight, graphTop + graphEl.offsetHeight);
       bounds.tree = { x: minX, y: top, w: maxX - minX, h: bottom - top };
       bounds.root = { x: cardLeft, y: cardTop, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
     }
@@ -1763,6 +1804,7 @@
     // Checklist until setup is done; the full dashboard once it is (or as soon as there is scan data).
     function renderDashboard() {
       if (!dashEl) return;
+      renderGraph();
       const checks = dashboardChecks();
       const ready = checks.every((c) => c.done);
       const hasData = Object.values(events).some((e) => e.type === 'impression');
@@ -2355,6 +2397,142 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && reportOpen() && !$('drawer').classList.contains('open')) closeReport(); });
     addEventListener('resize', scheduleReport);
 
+    /* ---------------- Graph: anonymous consumers (one per scanning device) ---------------- */
+    // Built from the synced event log. Identity (email/phone) joins these rows in a later stage.
+    const graphExpanded = new Set();
+    let lastGraphKey = '';
+    const TIERS = { buyer: 'Buyer', engaged: 'Engaged', viewer: 'Viewer' };
+    const TIER_RANK = { buyer: 0, engaged: 1, viewer: 2 };
+
+    // City name for an impression: a demo city if it's within 50 km, otherwise the place used by the dashboard.
+    function cityOf(e) {
+      if (e.lat == null) return 'No location';
+      for (const c of Object.values(CITIES)) if (distanceM(e, c) < 50000) return c.name;
+      return placeOf(e);
+    }
+
+    function consumersModel() {
+      const byDevice = new Map();
+      for (const e of Object.values(events)) {
+        if (!e.device) continue;
+        const c = byDevice.get(e.device) || byDevice.set(e.device, {
+          device: e.device, first: Infinity, last: 0, scans: 0, viewed: 0, dwell: 0, dwellN: 0,
+          actions: {}, objects: new Map(), spend: 0, buys: 0, places: new Map(), exps: new Map(),
+        }).get(e.device);
+        c.first = Math.min(c.first, e.t);
+        c.last = Math.max(c.last, e.end || e.t);
+        const key = e.exp || '';
+        const ex = c.exps.get(key) || c.exps.set(key, { id: key, seen: 0, buys: 0, cents: 0, objects: new Set() }).get(key);
+        if (e.type === 'impression') {
+          c.scans++; ex.seen++;
+          if (e.viewed) c.viewed++;
+          if (e.dwellMs != null) { c.dwell += e.dwellMs; c.dwellN++; }
+          const place = cityOf(e);
+          c.places.set(place, (c.places.get(place) || 0) + 1);
+        } else if (e.type === 'purchase') {
+          c.buys++; c.spend += e.amountCents || 0; ex.buys++; ex.cents += e.amountCents || 0;
+        } else if (e.type === 'object') {
+          c.objects.set(e.title || 'Object', (c.objects.get(e.title || 'Object') || 0) + 1);
+          ex.objects.add(e.title || 'Object');
+        } else {
+          c.actions[e.type] = (c.actions[e.type] || 0) + 1;
+        }
+      }
+      return [...byDevice.values()].map((c) => {
+        const taps = [...c.objects.values()].reduce((n, v) => n + v, 0);
+        const actionCount = Object.values(c.actions).reduce((n, v) => n + v, 0);
+        return {
+          ...c, taps, actionCount,
+          tier: c.spend ? 'buyer' : taps || actionCount ? 'engaged' : 'viewer',
+          label: '·' + c.device.slice(-4).toUpperCase(),
+          topPlace: [...c.places].sort((a, b) => b[1] - a[1])[0]?.[0] || 'No location',
+          seenExps: [...c.exps.values()].filter((x) => x.id && (x.seen || x.buys || x.objects.size)),
+        };
+      }).sort((a, b) => TIER_RANK[a.tier] - TIER_RANK[b.tier] || b.spend - a.spend || b.scans - a.scans || b.last - a.last);
+    }
+
+    function renderGraph() {
+      if (!graphEl) return;
+      const key = JSON.stringify([eventsVersion, [...graphExpanded], lastExpKey, deviceId]);
+      if (key === lastGraphKey) return;
+      lastGraphKey = key;
+
+      const el = (tag, className, text) => Object.assign(document.createElement(tag), className ? { className } : {}, text != null ? { textContent: text } : {});
+      const consumers = consumersModel();
+      graphEl.replaceChildren();
+
+      const head = el('div', 'graph-head');
+      head.append(el('span', '', consumers.length ? `Consumers · ${plural(consumers.length, 'device')}` : 'Consumers'));
+      const legend = el('span', 'graph-legend');
+      for (const [id, name] of Object.entries(TIERS)) { const item = el('span'); item.append(el('i', `tier ${id}`), document.createTextNode(name)); legend.append(item); }
+      head.append(legend);
+      graphEl.append(head);
+
+      if (!consumers.length) {
+        graphEl.append(el('div', 'dash-empty', 'No scans yet — each scanning device appears here'));
+      }
+      for (const c of consumers.slice(0, 12)) {
+        const wrap = el('div', 'consumer');
+        const row = el('button', 'consumer-row');
+        row.type = 'button';
+        row.setAttribute('aria-expanded', String(graphExpanded.has(c.device)));
+        row.onclick = () => { graphExpanded.has(c.device) ? graphExpanded.delete(c.device) : graphExpanded.add(c.device); renderGraph(); layout(); };
+        const meta = [c.topPlace, plural(c.scans, 'scan'), c.taps ? plural(c.taps, 'tap') : ''].filter(Boolean).join(' · ');
+        row.append(el('i', `tier ${c.tier}`), el('span', 'consumer-id', c.label + (c.device === deviceId ? ' (you)' : '')), el('span', 'consumer-meta', meta), el('span', 'consumer-spend', c.spend ? fmtMoney(c.spend) : '—'));
+        row.title = `${TIERS[c.tier]} · device ${c.device}`;
+        wrap.append(row);
+        if (graphExpanded.has(c.device)) wrap.append(consumerDetail(c, el));
+        graphEl.append(wrap);
+      }
+      if (consumers.length > 12) graphEl.append(el('div', 'dash-empty', `+ ${consumers.length - 12} more devices`));
+      if (bounds.tree) layout();
+    }
+
+    function consumerDetail(c, el) {
+      const detail = el('div', 'consumer-detail');
+      const facts = el('div', 'consumer-facts');
+      const fact = (label, value) => { const f = el('span', '', label); f.append(el('b', '', value)); facts.append(f); };
+      fact('First seen', timeLabel(c.first));
+      fact('Last seen', timeLabel(c.last));
+      fact('Places', [...c.places.keys()].join(', ') || '—');
+      fact('Hook rate', pct(rate(c.viewed, c.scans)));
+      fact('Avg watch', sec(rate(c.dwell, c.dwellN)));
+      fact('Actions', Object.entries(c.actions).map(([k, v]) => `${k === 'tap' ? 'learn more' : k} ${v}`).join(', ') || '—');
+      detail.append(facts, consumerGraphSvg(c));
+      return detail;
+    }
+
+    // Device → experiences it saw (dark edge = bought) → objects it tapped.
+    function consumerGraphSvg(c) {
+      // Columns: device · experience node + its two-line label · branch point · objects (lines never cross labels).
+      const W = 340, devX = 10, expX = 100, branchX = 224, objX = 256, rowH = 22, pad = 10;
+      const rows = c.seenExps.map((x) => ({ x, h: Math.max(1, x.objects.size) * rowH }));
+      const H = Math.max(40, rows.reduce((n, r) => n + r.h, 0) + pad * 2);
+      const svg = svgEl('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: 'cg', role: 'img', 'aria-label': `Graph for device ${c.label}` });
+      const text = (x, y, value, cls = '') => { const t = svgEl('text', { x, y: y + 4, class: cls }); t.textContent = value; svg.append(t); };
+      const trim = (value, n) => (value.length > n ? value.slice(0, n - 1) + '…' : value);
+      const devY = H / 2;
+      let y = pad;
+      for (const { x, h } of rows) {
+        const ey = y + h / 2, title = experiences[x.id]?.title || 'Deleted experience', bought = x.buys > 0;
+        svg.append(svgEl('path', { class: 'edge' + (bought ? ' bought' : ''), d: `M${devX} ${devY} C${(devX + expX) / 2} ${devY} ${(devX + expX) / 2} ${ey} ${expX} ${ey}` }));
+        [...x.objects].forEach((name, i) => {
+          const oy = y + i * rowH + rowH / 2;
+          svg.append(svgEl('path', { class: 'edge', d: `M${branchX} ${ey} C${(branchX + objX) / 2} ${ey} ${(branchX + objX) / 2} ${oy} ${objX} ${oy}` }));
+          svg.append(svgEl('circle', { class: 'node-obj', cx: objX, cy: oy, r: 3.5 }));
+          text(objX + 8, oy, trim(name, 12), 'muted');
+        });
+        if (x.objects.size) svg.append(svgEl('circle', { class: 'node-obj', cx: branchX, cy: ey, r: 2 }));
+        svg.append(svgEl('circle', { class: 'node-exp' + (bought ? ' bought' : ''), cx: expX, cy: ey, r: 5 }));
+        text(expX + 9, ey - 7, trim(title, 18));
+        text(expX + 9, ey + 7, bought ? `bought ${fmtMoney(x.cents)}` : plural(x.seen, 'view'), 'muted');
+        y += h;
+      }
+      svg.append(svgEl('circle', { class: 'node-device', cx: devX, cy: devY, r: 6 }));
+      if (!rows.length) text(devX + 12, devY, 'No experiences yet', 'muted');
+      return svg;
+    }
+
     /* ---------------- Live sync across devices (Firebase Realtime Database) ---------------- */
     // Firebase web config (public by design; access is governed by database rules). Set to null to run on this device only.
     const FIREBASE_CONFIG = {
@@ -2565,7 +2743,7 @@
     };
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
 
     buildTree();
     renderCard();
