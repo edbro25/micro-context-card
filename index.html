@@ -543,7 +543,7 @@
       tree.append(spokeLabel, statsEl, expLabel, expList, schedLabel, schedEl, ledgerLabel, ledgerEl, dashLabel, dashEl);
     }
 
-    // Spokes from the card: Ledger top-left, Schedule above, Dashboard top-right, Statistics left, Experiences right.
+    // Spokes from the card: Ledger top-left, Schedule above, Experiences top-right, Statistics left, Dashboard right.
     function layout() {
       const cardLeft = -cardEl.offsetWidth / 2, cardTop = -cardEl.offsetHeight / 2;
       const lineStart = cardLeft - SPOKE_GAP, dotX = lineStart - SPOKE_LEN;
@@ -551,7 +551,7 @@
       const tStart = cardTop - SPOKE_GAP, tDot = tStart - TOP_SPOKE_LEN;
       const dStartX = cardLeft - 8, dStartY = cardTop - 8, dDotX = dStartX - DIAG_SPOKE_LEN, dDotY = dStartY - DIAG_SPOKE_LEN;
       links.innerHTML = `<path id="link-stats" d="M${lineStart} 0 H${dotX}"/><circle cx="${dotX}" cy="0" r="2.5"/>`
-        + `<path id="link-exp" d="M${rStart} 0 H${rDot}"/><circle cx="${rDot}" cy="0" r="2.5"/>`
+        + `<path id="link-dash" d="M${rStart} 0 H${rDot}"/><circle cx="${rDot}" cy="0" r="2.5"/>`
         + `<path id="link-sched" d="M0 ${tStart} V${tDot}"/><circle cx="0" cy="${tDot}" r="2.5"/>`
         + `<path id="link-ledger" d="M${dStartX} ${dStartY} L${dDotX} ${dDotY}"/><circle cx="${dDotX}" cy="${dDotY}" r="2.5"/>`;
 
@@ -562,14 +562,6 @@
       const statsTop = -statsEl.offsetHeight / 2;
       statsEl.style.left = statsLeft + 'px';
       statsEl.style.top = statsTop + 'px';
-
-      const expLabelLeft = rDot + LABEL_GAP;
-      expLabel.style.left = expLabelLeft + 'px';
-      expLabel.style.top = '0px';
-      const expLeft = expLabelLeft + expLabel.offsetWidth + STATS_GAP;
-      const expTop = -expList.offsetHeight / 2;
-      expList.style.left = expLeft + 'px';
-      expList.style.top = expTop + 'px';
 
       const schedLabelCenter = tDot - LABEL_GAP - schedLabel.offsetHeight / 2;
       schedLabel.style.left = -schedLabel.offsetWidth / 2 + 'px';
@@ -586,24 +578,33 @@
       ledgerEl.style.left = ledgerLeft + 'px';
       ledgerEl.style.top = ledgerTop + 'px';
 
-      // Dashboard: top-right, mirroring the Ledger. It grows upward, and stays clear of the Experiences list when that gets tall.
+      // Experiences: top-right, mirroring the Ledger; grows upward and keeps 24px from the Schedule block.
       const rtStartX = -cardLeft + 8, rtStartY = cardTop - 8, rtDotX = rtStartX + DIAG_SPOKE_LEN, rtDotY = rtStartY - DIAG_SPOKE_LEN;
-      links.insertAdjacentHTML('beforeend', `<path id="link-dash" d="M${rtStartX} ${rtStartY} L${rtDotX} ${rtDotY}"/><circle cx="${rtDotX}" cy="${rtDotY}" r="2.5"/>`);
-      const dashLabelCenter = rtDotY - LABEL_GAP - dashLabel.offsetHeight / 2;
-      dashLabel.style.left = rtDotX - dashLabel.offsetWidth / 2 + 'px';
-      dashLabel.style.top = dashLabelCenter + 'px';
+      links.insertAdjacentHTML('beforeend', `<path id="link-exp" d="M${rtStartX} ${rtStartY} L${rtDotX} ${rtDotY}"/><circle cx="${rtDotX}" cy="${rtDotY}" r="2.5"/>`);
+      const expLabelCenter = rtDotY - LABEL_GAP - expLabel.offsetHeight / 2;
+      expLabel.style.left = rtDotX - expLabel.offsetWidth / 2 + 'px';
+      expLabel.style.top = expLabelCenter + 'px';
       const schedRight = schedEl.offsetWidth / 2;
-      const dashLeft = Math.max(rtDotX - dashLabel.offsetWidth / 2, schedRight + 24);
+      const expLeft = Math.max(rtDotX - expLabel.offsetWidth / 2, schedRight + 24);
+      const expBottom = expLabelCenter - expLabel.offsetHeight / 2 - 12;
+      const expTop = expBottom - expList.offsetHeight;
+      expList.style.left = expLeft + 'px';
+      expList.style.top = expTop + 'px';
+
+      // Dashboard: right of the card, centered on it; nudged down if it would run into the Experiences list above.
+      const dashLabelLeft = rDot + LABEL_GAP;
+      dashLabel.style.left = dashLabelLeft + 'px';
+      dashLabel.style.top = '0px';
+      const dashLeft = dashLabelLeft + dashLabel.offsetWidth + STATS_GAP;
       const expRight = expLeft + expList.offsetWidth;
-      let dashBottom = dashLabelCenter - dashLabel.offsetHeight / 2 - 12;
-      if (dashLeft < expRight && dashLeft + dashEl.offsetWidth > expLeft) dashBottom = Math.min(dashBottom, expTop - 24);
-      const dashTop = dashBottom - dashEl.offsetHeight;
+      let dashTop = -dashEl.offsetHeight / 2;
+      if (dashLeft < expRight) dashTop = Math.max(dashTop, expBottom + 24);
       dashEl.style.left = dashLeft + 'px';
       dashEl.style.top = dashTop + 'px';
 
       const minX = Math.min(statsLeft, ledgerLeft), maxX = Math.max(expRight, dashLeft + dashEl.offsetWidth);
       const top = Math.min(cardTop, statsTop, expTop, schedTop, ledgerTop, dashTop);
-      const bottom = Math.max(-cardTop, -statsTop, expTop + expList.offsetHeight);
+      const bottom = Math.max(-cardTop, -statsTop, dashTop + dashEl.offsetHeight);
       bounds.tree = { x: minX, y: top, w: maxX - minX, h: bottom - top };
       bounds.root = { x: cardLeft, y: cardTop, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
     }
