@@ -22,8 +22,9 @@
     #canvas.dragging { cursor: grabbing; }
     #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
     #links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-    #links path { fill: none; stroke: var(--link); stroke-width: 2; transition: stroke .5s, stroke-width .5s; }
-    #links path.lit { stroke: var(--accent); stroke-width: 3.5; transition: none; }
+    #links path { fill: none; stroke: #b9b9b1; stroke-width: 1.5; stroke-dasharray: 1.5 5; stroke-linecap: round; transition: stroke .6s; }
+    #links path.lit { stroke: var(--accent); transition: none; }
+    #links circle { fill: #9a9a92; }
 
     .topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 5; pointer-events: none;
       display: flex; justify-content: space-between; align-items: center; gap: 8px;
@@ -65,25 +66,16 @@
     .btn { background: var(--ink); color: #fff; border-radius: 999px; padding: 8px 16px; font-size: 14px; font-weight: 500; }
     .btn:disabled { opacity: .35; cursor: default; }
 
-    /* ---------- Metric branches ---------- */
+    /* ---------- Statistics spoke (left of the card) ---------- */
     #tree { transition: opacity .4s; }
     #tree.empty { opacity: 0; pointer-events: none; }
-    .branch, .metric { position: absolute; border-radius: 12px; }
-    .branch { width: 206px; background: var(--ink); color: #fff; padding: 10px 12px; }
-    .branch b { display: block; font-size: 14px; }
-    .branch span { font-size: 11px; opacity: .7; }
-    .metric { width: 182px; min-height: 80px; background: var(--card); border: 1px solid var(--line); padding: 8px 12px;
-      box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-    .metric .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-    .metric .row { display: flex; align-items: baseline; gap: 6px; margin: 1px 0 2px; min-width: 0; }
-    .metric .value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
-    .metric .detail { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .metric .proxy { font-size: 11px; color: var(--muted); line-height: 1.3; }
-    .metric.pulse { animation: pulse .9s ease-out; }
-    @keyframes pulse {
-      0% { transform: scale(1.06); border-color: var(--accent); box-shadow: 0 0 0 6px rgba(47,109,246,.25); }
-      100% { transform: scale(1); border-color: var(--line); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-    }
+    .spoke-label { position: absolute; font-size: 13px; color: var(--muted); white-space: nowrap; transform: translateY(-50%); }
+    .stats { position: absolute; display: grid; grid-template-columns: repeat(2, 148px); column-gap: 28px; row-gap: 16px; align-items: start; }
+    .stat-group h4 { margin: 0 0 3px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #a3a39b; }
+    .stat { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 2px 0;
+      font-size: 12.5px; color: var(--muted); cursor: default; }
+    .stat b { font-weight: 560; color: var(--ink); font-variant-numeric: tabular-nums; transition: color .8s; }
+    .stat.pulse b { color: var(--accent); transition: none; }
 
     /* ---------- Viewfinder ---------- */
     #scanner { position: fixed; inset: 0; z-index: 20; background: #000; overflow: hidden; touch-action: manipulation; }
@@ -263,76 +255,68 @@
     const leafById = {};
     BRANCHES.forEach((b) => b.leaves.forEach((l) => { l.branch = b.id; leafById[l.id] = l; }));
 
-    /* ---------------- Tree: build, lay out, render ---------------- */
+    /* ---------------- Statistics spoke: build, lay out, render ---------------- */
     const tree = $('tree'), links = $('links'), cardEl = $('card');
-    const COL_GAP = 230, BRANCH_Y = 250, SPINE_INSET = 12, LEAF_INDENT = 24, LEAF_GAP = 10;
+    const SPOKE_GAP = 14, SPOKE_LEN = 110, LABEL_GAP = 10, STATS_GAP = 28;
     let bounds = { tree: null, root: null };
+    let statsEl, spokeLabel;
 
     function buildTree() {
+      spokeLabel = Object.assign(document.createElement('div'), { className: 'spoke-label', textContent: 'Statistics' });
+      statsEl = Object.assign(document.createElement('div'), { className: 'stats' });
       for (const b of BRANCHES) {
-        b.el = Object.assign(document.createElement('div'), { className: 'branch' });
-        b.el.innerHTML = `<b>${b.title}</b><span>${b.sub}</span>`;
-        tree.append(b.el);
+        const group = Object.assign(document.createElement('div'), { className: 'stat-group' });
+        group.innerHTML = `<h4 title="${b.sub}">${b.title}</h4>`;
         for (const l of b.leaves) {
-          l.el = Object.assign(document.createElement('div'), { className: 'metric' });
-          l.el.innerHTML = `<div class="label">${l.label}</div><div class="row"><span class="value"></span><span class="detail"></span></div><div class="proxy">${l.proxy}</div>`;
-          l.valueEl = l.el.querySelector('.value');
-          l.detailEl = l.el.querySelector('.detail');
-          tree.append(l.el);
+          l.el = Object.assign(document.createElement('div'), { className: 'stat', title: l.proxy });
+          l.el.innerHTML = `<span>${l.label}</span><b></b>`;
+          l.valueEl = l.el.querySelector('b');
+          group.append(l.el);
         }
+        statsEl.append(group);
       }
+      tree.append(spokeLabel, statsEl);
     }
 
+    // Card ← dotted spoke ← "Statistics" ← metrics list, all vertically centered on the card.
     function layout() {
-      const place = (el, x, y) => { el.style.left = x + 'px'; el.style.top = y + 'px'; };
-      const rootBottom = cardEl.offsetHeight / 2;
-      const midY = (rootBottom + BRANCH_Y) / 2;
-      const paths = [];
-      let maxY = BRANCH_Y;
-      BRANCHES.forEach((b, i) => {
-        const cx = (i - (BRANCHES.length - 1) / 2) * COL_GAP;
-        const left = cx - 103;
-        place(b.el, left, BRANCH_Y);
-        const branchBottom = BRANCH_Y + b.el.offsetHeight;
-        paths.push(`<path id="link-${b.id}" d="M0 ${rootBottom} V${midY} H${cx} V${BRANCH_Y}"/>`);
-        const spineX = left + SPINE_INSET;
-        let y = branchBottom + LEAF_GAP;
-        for (const l of b.leaves) {
-          place(l.el, left + LEAF_INDENT, y);
-          const mid = y + l.el.offsetHeight / 2;
-          paths.push(`<path id="link-${l.id}" d="M${spineX} ${branchBottom} V${mid} H${left + LEAF_INDENT}"/>`);
-          y += l.el.offsetHeight + LEAF_GAP;
-        }
-        maxY = Math.max(maxY, y);
-      });
-      links.innerHTML = paths.join('');
-      const halfW = ((BRANCHES.length - 1) / 2) * COL_GAP + 103;
-      const top = -cardEl.offsetHeight / 2;
-      bounds.tree = { x: -halfW, y: top, w: halfW * 2, h: maxY - top };
-      bounds.root = { x: -cardEl.offsetWidth / 2, y: top, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
+      const cardLeft = -cardEl.offsetWidth / 2, cardTop = -cardEl.offsetHeight / 2;
+      const lineStart = cardLeft - SPOKE_GAP, dotX = lineStart - SPOKE_LEN;
+      links.innerHTML = `<path id="link-stats" d="M${lineStart} 0 H${dotX}"/><circle cx="${dotX}" cy="0" r="2.5"/>`;
+      const labelLeft = dotX - LABEL_GAP - spokeLabel.offsetWidth;
+      spokeLabel.style.left = labelLeft + 'px';
+      spokeLabel.style.top = '0px';
+      const statsLeft = labelLeft - STATS_GAP - statsEl.offsetWidth;
+      const statsTop = -statsEl.offsetHeight / 2;
+      statsEl.style.left = statsLeft + 'px';
+      statsEl.style.top = statsTop + 'px';
+      const top = Math.min(cardTop, statsTop);
+      bounds.tree = { x: statsLeft, y: top, w: -cardLeft - statsLeft, h: -2 * top };
+      bounds.root = { x: cardLeft, y: cardTop, w: cardEl.offsetWidth, h: cardEl.offsetHeight };
     }
 
-    const litTimers = {};
-    function light(id) {
-      const p = links.querySelector('#link-' + id);
+    let litTimer = null;
+    function light() {
+      const p = links.querySelector('#link-stats');
       if (!p) return;
       p.classList.add('lit');
-      clearTimeout(litTimers[id]);
-      litTimers[id] = setTimeout(() => p.classList.remove('lit'), 250);
+      clearTimeout(litTimer);
+      litTimer = setTimeout(() => p.classList.remove('lit'), 250);
     }
 
     function renderMetrics(pulse = true) {
       for (const l of Object.values(leafById)) {
-        const v = l.value(metrics), d = l.detail ? l.detail(metrics) : '';
-        if (l.valueEl.textContent === v && l.detailEl.textContent === d) continue;
+        const v = l.value(metrics);
+        const d = l.detail ? l.detail(metrics) : '';
+        const tip = d ? `${l.proxy} · ${d}` : l.proxy;
+        if (l.el.title !== tip) l.el.title = tip;
+        if (l.valueEl.textContent === v) continue;
         l.valueEl.textContent = v;
-        l.detailEl.textContent = d;
         if (pulse && l.rendered) {
-          l.el.classList.remove('pulse');
-          void l.el.offsetWidth;
           l.el.classList.add('pulse');
-          light(l.branch);
-          light(l.id);
+          clearTimeout(l.pulseTimer);
+          l.pulseTimer = setTimeout(() => l.el.classList.remove('pulse'), 700);
+          light();
         }
         l.rendered = true;
       }
@@ -775,7 +759,7 @@
       appId: '1:974150159084:web:5c25ab182da8dc2bedb3c9',
     };
     const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
-    const ROOM = 'default';
+    const ROOM = (new URLSearchParams(location.search).get('room') || 'default').replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'default';
     const clientId = Math.random().toString(36).slice(2, 10);
     const sync = { on: false, api: null, db: null, connected: false };
     let remoteLive = null, lastTarget = null, firstMetrics = true, metricsPushTimer = null, livePushAt = 0;
