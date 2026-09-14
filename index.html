@@ -245,12 +245,15 @@
     @keyframes pop { 0% { transform: translate(-50%,-50%) scale(.4); opacity: 0; } 25% { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
       100% { transform: translate(-50%,-90%) scale(1); opacity: 0; } }
 
-    #expOverlay { position: absolute; left: 12px; right: 64px; top: calc(60px + env(safe-area-inset-top)); bottom: calc(108px + env(safe-area-inset-bottom));
-      background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.35); animation: expIn .3s ease-out; }
-    #expOverlay iframe { display: block; width: 100%; height: 100%; border: 0; }
-    #expOverlay .exp-close { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 50%;
-      background: rgba(0,0,0,.55); color: #fff; font-size: 13px; }
-    @keyframes expIn { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+    /* Experiences float fullscreen over the live camera (AR-style); transparent pages show the real world behind. */
+    #expOverlay { position: absolute; inset: 0; background: transparent; animation: expIn .35s ease-out; }
+    #expOverlay iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: normal; }
+    #expOverlay .exp-close { position: absolute; top: calc(64px + env(safe-area-inset-top)); right: 12px; width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(0,0,0,.45); color: #fff; font-size: 14px; }
+    @keyframes expIn { from { opacity: 0; transform: scale(.98); } }
+    #scanner.exp-on .guide, #scanner.exp-on .scan-status { display: none; }
+    /* An experience with its own data-action buttons replaces the camera's buttons. */
+    #scanner.exp-actions .rail, #scanner.exp-actions .cta, #scanner.exp-actions .buy { display: none; }
     .loc-chip { margin-left: 8px; font-size: 12px; opacity: .9; }
 
     /* ---------- Report (full-screen, printable) ---------- */
@@ -310,14 +313,8 @@
     .rp-foot { margin: 4px 0 0; font-size: 12px; color: var(--rp-muted); text-align: center; }
     .rp-tip { position: fixed; z-index: 45; pointer-events: none; background: #0b0b0b; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 6px; white-space: nowrap; }
 
-    /* While scanning: camera and live canvas share the screen */
+    /* While scanning, the camera is fullscreen (no split screen). */
     body.scanning .topbar { display: none; }
-    body.scanning #scanner { inset: 0 0 42% 0; }
-    body.scanning #canvas { inset: 58% 0 0 0; border-top: 1px solid var(--line); }
-    @media (min-aspect-ratio: 1/1) {
-      body.scanning #scanner { inset: 0 50% 0 0; }
-      body.scanning #canvas { inset: 0 0 0 50%; border-top: 0; border-left: 1px solid var(--line); }
-    }
     @media print {
       @page { margin: 14mm; }
       html:has(body.report-open), body.report-open { height: auto; overflow: visible; background: #fff; }
@@ -1383,6 +1380,8 @@
       frame.onload = () => frame.contentWindow?.postMessage({ source: 'context-canvas', type: 'init', price: x.priceCents ? fmtMoney(x.priceCents) : '' }, '*');
       frame.srcdoc = withActionBridge(sanitizeExperienceHtml(x.html).html);
       $('expOverlay').hidden = false;
+      $('scanner').classList.add('exp-on');
+      $('scanner').classList.toggle('exp-actions', /data-action\s*=/i.test(x.html));
       const entry = { at: Date.now(), ...(here ? { lat: +here.lat.toFixed(5), lng: +here.lng.toFixed(5) } : {}) };
       upsertExperience({ ...x, plays: (x.plays || 0) + 1, lastPlayedAt: entry.at, history: [...(x.history || []), entry].slice(-5) });
       light('exp');
@@ -1392,6 +1391,7 @@
       if (!currentExp) return;
       currentExp = null;
       $('expOverlay').hidden = true;
+      $('scanner').classList.remove('exp-on', 'exp-actions');
       $('expOverlay').querySelector('iframe').onload = null;
       $('expOverlay').querySelector('iframe').srcdoc = '';
       updateBuy();
