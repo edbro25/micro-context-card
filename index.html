@@ -722,7 +722,8 @@
       const now = Date.now();
       imp = { start: now, lostAt: null, baseZ: null, viewed: false, completed: false, leaned: false, actions: {} };
       metrics.impressions++;
-      if (lastEndAt && now - lastEndAt <= REWATCH_MS) metrics.rewatches++;
+      const rewatch = !!lastEndAt && now - lastEndAt <= REWATCH_MS;
+      if (rewatch) metrics.rewatches++;
       card.seen = metrics.impressions;
       save(); saveMetrics();
       renderMetrics();
@@ -735,6 +736,7 @@
       navigator.vibrate?.(40);
       const exp = pickExperience();
       if (exp) showExperience(exp);
+      logImpressionStart(rewatch);
       pushLive(true);
       onTriggerSeen(card, metrics);
     }
@@ -753,6 +755,7 @@
       if (!imp) return;
       const end = imp.lostAt ?? Date.now();
       const dwell = end - imp.start;
+      logImpressionEnd(end, dwell);
       if (dwell < HOOK_MS) metrics.skips++;
       metrics.totalDwellMs += dwell;
       metrics.maxDwellMs = Math.max(metrics.maxDwellMs, dwell);
@@ -777,6 +780,7 @@
         if (!imp.leaned && Date.now() - leanStart >= LEAN_MS) {
           imp.leaned = true;
           metrics.leanIns++;
+          logAction('lean-in');
           saveMetrics();
           renderMetrics();
         }
@@ -830,6 +834,7 @@
       actionButtons().filter((b) => b.dataset.act === type).forEach((b) => b.classList.add('active'));
       metrics[ACTION_KEYS[type]]++;
       markEngaged(imp, type);
+      logAction(type);
       saveMetrics();
       renderMetrics();
     }
@@ -846,6 +851,7 @@
       metrics.comments++;
       metrics.lastComment = text.slice(0, 60);
       markEngaged(imp, 'comment');
+      logAction('comment', { text: text.slice(0, 60) });
       saveMetrics();
       renderMetrics();
     });
@@ -1369,6 +1375,53 @@
       closeDrawer();
     });
 
+    /* ---------------- Event log: time-stamped impressions and actions ---------------- */
+    // The raw record behind the dashboard: every impression and action, with time, experience, location and device.
+    const EVENTS_KEY = 'contextCanvas.events.v1', MAX_LOCAL_EVENTS = 1000;
+    const deviceId = (() => {
+      try {
+        let id = localStorage.getItem('contextCanvas.device');
+        if (!id) { id = 'd' + Math.random().toString(36).slice(2, 10); localStorage.setItem('contextCanvas.device', id); }
+        return id;
+      } catch { return 'd' + Math.random().toString(36).slice(2, 10); }
+    })();
+    let events = loadJSON(EVENTS_KEY);
+    let eventSeq = 0;
+
+    const newEventId = () => `${Date.now().toString(36)}-${deviceId}-${(eventSeq++).toString(36)}`;
+    const whereNow = () => (here ? { lat: +here.lat.toFixed(5), lng: +here.lng.toFixed(5), acc: here.acc } : {});
+
+    function writeEvent(id, event) {
+      const clean = Object.fromEntries(Object.entries(event).filter(([, v]) => v !== undefined && v !== null));
+      events[id] = clean;
+      const ids = Object.keys(events);
+      if (ids.length > MAX_LOCAL_EVENTS) {
+        ids.sort((a, b) => events[a].t - events[b].t).slice(0, ids.length - MAX_LOCAL_EVENTS).forEach((k) => delete events[k]);
+      }
+      try { localStorage.setItem(EVENTS_KEY, JSON.stringify(events)); } catch {}
+      put(`events/${id}`, clean);
+    }
+
+    // Written when the photo comes into view, then completed when the impression ends.
+    function logImpressionStart(rewatch) {
+      imp.eventId = newEventId();
+      imp.expId = currentExp?.id || null;
+      imp.event = { type: 'impression', t: imp.start, exp: imp.expId, rewatch, device: deviceId, ...whereNow() };
+      writeEvent(imp.eventId, imp.event);
+    }
+    function logImpressionEnd(end, dwell) {
+      if (!imp?.eventId) return;
+      const actions = Object.keys(imp.actions);
+      writeEvent(imp.eventId, {
+        ...imp.event, end, dwellMs: dwell, viewed: dwell >= HOOK_MS, completed: dwell >= COMPLETE_MS,
+        leaned: imp.leaned, actions: actions.length ? actions : null,
+      });
+    }
+    function logAction(type, extra = {}) {
+      if (!imp?.eventId) return;
+      writeEvent(newEventId(), { type, t: Date.now(), imp: imp.eventId, exp: imp.expId, device: deviceId, ...whereNow(), ...extra });
+    }
+
     /* ---------------- Dashboard: setup checklist (the dashboard unlocks when all are done) ---------------- */
     let lastDashKey = '';
 
@@ -1489,7 +1542,8 @@
       schedEditing = false;
       stakeholders = {};
       ledgerAdding = false;
-      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); localStorage.removeItem(SCHED_KEY); localStorage.removeItem(LEDGER_KEY); } catch {}
+      events = {};
+      try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(METRICS_KEY); localStorage.removeItem(EXP_KEY); localStorage.removeItem(SCHED_KEY); localStorage.removeItem(LEDGER_KEY); localStorage.removeItem(EVENTS_KEY); } catch {}
       cardEl.classList.remove('seen');
       renderCard();
       renderMetrics(false);
@@ -1571,7 +1625,7 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
