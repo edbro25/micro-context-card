@@ -997,7 +997,6 @@
     // Stored in basis points so percentages add up exactly (10000 bps = 100%).
     const LEDGER_KEY = 'contextCanvas.ledger.v1';
     const PLATFORM_NAME = 'SPAT', PLATFORM_BPS = 300, STAKEHOLDER_BPS = 10000 - PLATFORM_BPS;
-    const LEDGER_SHADES = ['#74746c', '#a3a39b', '#8a8a82', '#c4c4bc', '#b3b3ab'];
     let stakeholders = loadJSON(LEDGER_KEY);
     let ledgerAdding = false;
 
@@ -1016,7 +1015,9 @@
         Object.assign(document.createElement('span'), { className: 'status', textContent: open === 0 ? 'Fully allocated' : open > 0 ? `${fmtPct(open)} open` : `Over by ${fmtPct(-open)}` }),
       );
       const bar = Object.assign(document.createElement('div'), { className: 'ledger-bar' });
-      list.forEach((x, i) => bar.append(Object.assign(document.createElement('i'), { style: `flex:0 0 ${x.bps / 100}%;background:${LEDGER_SHADES[i % LEDGER_SHADES.length]}` })));
+      // Green progress toward 97% (one segment per stakeholder), SPAT's 3% pinned at the end.
+      const fill = open < 0 ? '#c0392b' : 'var(--ok)';
+      list.forEach((x) => bar.append(Object.assign(document.createElement('i'), { style: `flex:0 0 ${x.bps / 100}%;background:${fill}` })));
       bar.append(Object.assign(document.createElement('i'), { style: `flex:0 0 ${PLATFORM_BPS / 100}%;margin-left:auto;background:var(--ink)` }));
       ledgerEl.append(sum, bar);
 
