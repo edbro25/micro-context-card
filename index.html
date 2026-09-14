@@ -45,6 +45,15 @@
     .scan-top .city-toggle { background: rgba(0,0,0,.45); border-color: transparent; }
     .scan-top .city-toggle button { padding: 6px 10px; background: transparent; color: #fff; text-shadow: none; }
     .scan-top .city-toggle button.on { background: #fff; color: var(--ink); }
+    /* Viewer mode (not the owner): editing controls are hidden; scanning, viewing and the report still work. */
+    body.viewer #resetBtn, body.viewer .exp-link:not(.dash-report), body.viewer .exp-play, body.viewer .ledger-row .rm { display: none !important; }
+    body.viewer .photo, body.viewer .dash button.check { pointer-events: none; }
+    #ownerBtn.owner { background: var(--ink); border-color: var(--ink); color: #fff; }
+    .topbar .pill, .topbar .city-toggle { white-space: nowrap; }
+    /* Narrow screens: drop the brand name first, then let the right-hand controls wrap instead of running off-screen. */
+    .topbar { align-items: flex-start; }
+    .topbar .actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+    @media (max-width: 640px) { .brand { display: none; } }
     .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px;
       padding: 8px 14px; font-size: 13px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 
@@ -362,6 +371,7 @@
     </div>
     <div class="actions">
       <div class="city-toggle" role="group" aria-label="Demo city"><button type="button" data-city="nyc">NYC</button><button type="button" data-city="la">LA</button></div>
+      <button class="pill" id="ownerBtn" type="button" hidden>Owner sign-in</button>
       <button class="pill" id="resetBtn" hidden>Reset metrics</button>
       <button class="pill" id="recenter">Fit</button>
     </div>
@@ -760,12 +770,13 @@
     }
 
     $('title').addEventListener('input', () => {
+      if (!isOwner) return;
       card.title = $('title').textContent.trim() || 'Untitled';
       save();
       put('title', { value: card.title, by: clientId });
     });
     $('title').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
-    $('photo').addEventListener('click', () => { if (!moved) $('fileInput').click(); });
+    $('photo').addEventListener('click', () => { if (!moved && isOwner) $('fileInput').click(); });
     $('fileInput').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       e.target.value = '';
@@ -773,6 +784,7 @@
     });
     // Resets the whole demo — photo, title and metrics — on every connected device.
     $('resetBtn').onclick = () => {
+      if (!isOwner) return;
       if (!confirm('Reset everything (photo, title and metrics) on all devices?')) return;
       resetEverything();
     };
@@ -1295,6 +1307,14 @@
       put(`experiences/${x.id}`, x);
       renderExperiences();
     }
+    // Play counters are the only experience fields a scanner (non-owner) may write — see firebase/database.rules.json.
+    function recordPlay(x, entry) {
+      const fields = { plays: (x.plays || 0) + 1, lastPlayedAt: entry.at, history: [...(x.history || []), entry].slice(-5) };
+      experiences[x.id] = { ...x, ...fields };
+      saveExperiencesLocal();
+      if (sync.on) sync.api.update(roomRef(`experiences/${x.id}`), fields).catch((err) => console.error('[sync]', err));
+      renderExperiences();
+    }
     function removeExperience(id) {
       delete experiences[id];
       expanded.delete(id);
@@ -1402,7 +1422,7 @@
       $('scanner').classList.add('exp-on');
       $('scanner').classList.toggle('exp-actions', /data-action\s*=/i.test(x.html));
       const entry = { at: Date.now(), ...(here ? { lat: +here.lat.toFixed(5), lng: +here.lng.toFixed(5) } : {}) };
-      upsertExperience({ ...x, plays: (x.plays || 0) + 1, lastPlayedAt: entry.at, history: [...(x.history || []), entry].slice(-5) });
+      recordPlay(x, entry);
       light('exp');
       updateBuy();
     }
@@ -1687,7 +1707,7 @@
       try { localStorage.setItem(EVENTS_KEY, JSON.stringify(Object.fromEntries(ids.map((k) => [k, events[k]])))); } catch {}
     }
     function writeEvent(id, event) {
-      const clean = Object.fromEntries(Object.entries(event).filter(([, v]) => v !== undefined && v !== null));
+      const clean = Object.fromEntries(Object.entries({ ...event, uid: session.user?.uid }).filter(([, v]) => v !== undefined && v !== null));
       events[id] = clean;
       eventsVersion++;
       saveEventsLocal();
@@ -2350,6 +2370,9 @@
     const ROOM = (new URLSearchParams(location.search).get('room') || 'default').replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'default';
     const clientId = Math.random().toString(36).slice(2, 10);
     const sync = { on: false, api: null, db: null, connected: false };
+    // Auth: everyone gets a quiet anonymous session (enough to scan and view); the owner signs in with Google to edit.
+    const session = { api: null, auth: null, user: null };
+    let isOwner = true;   // editing stays open until the security rules say otherwise
     let remoteLive = null, lastTarget = null, firstMetrics = true, metricsPushTimer = null, livePushAt = 0;
 
     function roomRef(path) {
@@ -2462,23 +2485,27 @@
       if (!FIREBASE_CONFIG) return;
       updateSyncPill();
       try {
-        const [{ initializeApp }, api] = await Promise.all([
+        const [{ initializeApp }, api, authApi] = await Promise.all([
           import(FIREBASE_SDK + 'firebase-app.js'),
           import(FIREBASE_SDK + 'firebase-database.js'),
+          import(FIREBASE_SDK + 'firebase-auth.js'),
         ]);
+        const app = initializeApp(FIREBASE_CONFIG);
         sync.api = api;
-        sync.db = api.getDatabase(initializeApp(FIREBASE_CONFIG));
+        sync.db = api.getDatabase(app);
+        await startAuth(authApi, app);
         sync.on = true;
-        api.onValue(api.ref(sync.db, '.info/connected'), (s) => { sync.connected = !!s.val(); updateSyncPill(); });
-        api.onValue(roomRef('title'), (s) => applyTitle(s.val()));
-        api.onValue(roomRef('target'), (s) => applyTarget(s.val()));
-        api.onValue(roomRef('photo'), (s) => applyPhoto(s.val()));
-        api.onValue(roomRef('metrics'), (s) => applyMetrics(s.val()));
-        api.onValue(roomRef('live'), (s) => applyLive(s.val()));
-        api.onValue(roomRef('experiences'), (s) => applyExperiences(s.val()));
-        api.onValue(roomRef('schedule'), (s) => applySchedule(s.val()));
-        api.onValue(roomRef('ledger'), (s) => applyLedger(s.val()));
-        api.onValue(roomRef('events'), (s) => applyEvents(s.val()));
+        const listen = (path, apply) => api.onValue(roomRef(path), (snap) => apply(snap.val()), (err) => console.warn('[sync] no read access to', path, err?.code || err));
+        api.onValue(api.ref(sync.db, '.info/connected'), (snap) => { sync.connected = !!snap.val(); updateSyncPill(); });
+        listen('title', applyTitle);
+        listen('target', applyTarget);
+        listen('photo', applyPhoto);
+        listen('metrics', applyMetrics);
+        listen('live', applyLive);
+        listen('experiences', applyExperiences);
+        listen('schedule', applySchedule);
+        listen('ledger', applyLedger);
+        listen('events', applyEvents);
         updateSyncPill();
       } catch (err) {
         console.error('[sync]', err);
@@ -2486,8 +2513,59 @@
       }
     }
 
+    async function startAuth(authApi, app) {
+      session.api = authApi;
+      session.auth = authApi.getAuth(app);
+      await authApi.getRedirectResult(session.auth).catch(() => {});
+      await new Promise((resolve) => {
+        let first = true;
+        authApi.onAuthStateChanged(session.auth, async (user) => {
+          session.user = user;
+          if (!user) {
+            try { await authApi.signInAnonymously(session.auth); return; }   // fires onAuthStateChanged again
+            catch (err) { console.warn('[auth] anonymous sign-in unavailable; continuing without a session', err?.code || err); }
+          }
+          await refreshRole();
+          if (first) { first = false; resolve(); }
+        });
+      });
+    }
+
+    // The owner is whoever the database lets read the private `people` path.
+    async function refreshRole() {
+      try { await sync.api.get(roomRef('people')); applyRole(true); }
+      catch { applyRole(false); }
+    }
+
+    function applyRole(owner) {
+      isOwner = owner;
+      document.body.classList.toggle('viewer', !owner);
+      $('title').contentEditable = String(owner);
+      if (!owner) { closeDrawer(); schedEditing = false; ledgerAdding = false; renderSchedule(); renderLedger(); }
+      const btn = $('ownerBtn'), user = session.user, signedIn = !!user && !user.isAnonymous;
+      btn.hidden = !session.auth;
+      btn.classList.toggle('owner', owner && signedIn);
+      btn.textContent = signedIn ? (owner ? 'Owner · Sign out' : 'View only · Sign out') : 'Sign in';
+      btn.title = signedIn ? `Signed in as ${user.email || 'Google account'}` : 'Sign in with Google to edit';
+    }
+
+    $('ownerBtn').onclick = async () => {
+      if (!session.auth) return;
+      const a = session.api;
+      if (session.user && !session.user.isAnonymous) { await a.signOut(session.auth); return; }   // back to an anonymous session
+      const provider = new a.GoogleAuthProvider();
+      try {
+        await a.signInWithPopup(session.auth, provider);
+      } catch (err) {
+        if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'].includes(err?.code)) return a.signInWithRedirect(session.auth, provider);
+        console.error('[auth]', err);
+        $('ownerBtn').textContent = err?.code === 'auth/unauthorized-domain' ? 'Domain not authorized' : 'Sign-in failed';
+        setTimeout(() => applyRole(isOwner), 2500);
+      }
+    };
+
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
 
     buildTree();
     renderCard();

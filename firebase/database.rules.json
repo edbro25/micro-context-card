@@ -1,0 +1,38 @@
+{
+  "rules": {
+    "demos": {
+      "$room": {
+        ".write": "auth != null && ((auth.token.email === 'OWNER_EMAIL' && auth.token.email_verified === true) || $room.beginsWith('test-'))",
+
+        "people": {
+          ".read": "auth != null && ((auth.token.email === 'OWNER_EMAIL' && auth.token.email_verified === true) || $room.beginsWith('test-'))"
+        },
+
+        "photo": { ".read": "auth != null" },
+        "target": { ".read": "auth != null" },
+        "title": { ".read": "auth != null" },
+        "schedule": { ".read": "auth != null" },
+        "ledger": { ".read": "auth != null" },
+
+        "experiences": {
+          ".read": "auth != null",
+          "$exp": {
+            "plays": { ".write": "auth != null" },
+            "lastPlayedAt": { ".write": "auth != null" },
+            "history": { ".write": "auth != null" }
+          }
+        },
+
+        "metrics": { ".read": "auth != null", ".write": "auth != null" },
+        "live": { ".read": "auth != null", ".write": "auth != null" },
+
+        "events": {
+          ".read": "auth != null",
+          "$event": {
+            ".write": "auth != null && newData.exists() && newData.child('uid').val() === auth.uid && (!data.exists() || data.child('uid').val() === auth.uid)"
+          }
+        }
+      }
+    }
+  }
+}
