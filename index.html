@@ -225,6 +225,13 @@
     .cg .node-obj { fill: #a3a39b; }
     .cg text { font-size: 11px; fill: #1d1d1b; }
     .cg text.muted { fill: #74746c; }
+    .seg-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+    .chip { padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 11px; color: var(--muted); cursor: pointer; }
+    .chip b { margin-left: 3px; font-weight: 560; color: var(--ink); }
+    .chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+    .chip.on b { color: #fff; }
+    .seg-next { margin: 4px 0 6px; font-size: 11.5px; color: var(--ink); }
+    .seg-next span { color: var(--muted); }
 
     /* ---------- Add-experience drawer (sidebar on desktop, pop-out on mobile) ---------- */
     #drawerScrim { position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,.18); }
@@ -1986,6 +1993,7 @@
         if (e.type === 'comment') what = `Comment “${e.text || ''}”`;
         if (e.type === 'object') what = `Tapped ${e.title || 'object'}`;
         if (e.type === 'referral') what = 'Opened a shared link';
+        if (e.type === 'identify') what = 'Shared an email';
         const title = e.exp ? experiences[e.exp]?.title : '';
         return [timeLabel(e.t), title ? `${what} · ${title}` : what];
       });
@@ -2555,6 +2563,17 @@
     let lastGraphKey = '';
     const TIERS = { buyer: 'Buyer', engaged: 'Engaged', viewer: 'Viewer' };
     const TIER_RANK = { buyer: 0, engaged: 1, viewer: 2 };
+    // Rule-based segments from behaviour already in the Graph, each with a suggested next step.
+    const SEGMENTS = [
+      { id: 'buyers', name: 'Buyers', next: 'Invite them to share — referrals are credited to them', test: (c) => c.spend > 0 },
+      { id: 'repeat', name: 'Repeat buyers', next: 'Offer a VIP upgrade or early access', test: (c) => c.buys >= 2 },
+      { id: 'tapped', name: 'Tapped, didn’t buy', next: 'Show a priced experience featuring what they tapped', test: (c) => c.taps > 0 && !c.spend },
+      { id: 'hooked', name: 'Watched, no action', next: 'Add a clearer object or Buy call to action', test: (c) => c.viewed > 0 && !c.taps && !c.actionCount && !c.spend },
+      { id: 'skippers', name: 'Quick skips', next: 'Test a stronger hook in the first second', test: (c) => c.scans > 0 && !c.viewed },
+      { id: 'referrers', name: 'Referrers', next: 'Reward top referrers through the Ledger', test: (c) => c.referredCount > 0 },
+      { id: 'optin', name: 'Opted in to offers', next: 'Send the next drop by email or text', test: (c) => c.optedIn },
+    ];
+    const graphFilter = { place: 'all', segment: 'all' };
 
     // City name for an impression: a demo city if it's within 50 km, otherwise the place used by the dashboard.
     function cityOf(e) {
@@ -2572,9 +2591,10 @@
       const byDevice = new Map();
       const identified = new Set();
       const referredBy = new Map();   // device → device that referred it
+      const optInDevices = new Set();  // devices that opted in to offers (no email needed)
       for (const e of Object.values(events)) {
         if (!e.device) continue;
-        if (e.type === 'identify') { identified.add(e.device); continue; }
+        if (e.type === 'identify') { identified.add(e.device); if (e.marketing) optInDevices.add(e.device); continue; }
         const c = byDevice.get(e.device) || byDevice.set(e.device, blank(e.device)).get(e.device);
         c.first = Math.min(c.first, e.t);
         c.last = Math.max(c.last, e.end || e.t);
@@ -2622,6 +2642,7 @@
           ...c, key, taps, actionCount, person,
           identified: !!person || c.devices.some((d) => identified.has(d)),
           identifiedDevices: c.devices.filter((d) => personByDevice.has(d) || identified.has(d)).length,
+          optedIn: person ? !!person.consentMarketing : c.devices.some((d) => optInDevices.has(d)),
           tier: c.spend ? 'buyer' : taps || actionCount ? 'engaged' : 'viewer',
           label: person?.email || '·' + c.devices[0].slice(-4).toUpperCase(),
           deviceLabels: c.devices.map((d) => '·' + d.slice(-4).toUpperCase()),
@@ -2641,13 +2662,14 @@
         r.referred = [...broughtKeys].map((k) => rowByKey.get(k)).filter(Boolean);
         r.referredCount = r.referred.length;
         r.referralRevenue = r.referred.reduce((n, x) => n + x.spend, 0);
+        r.segments = SEGMENTS.filter((seg) => seg.test(r)).map((seg) => seg.id);
       }
       return rows.sort((a, b) => TIER_RANK[a.tier] - TIER_RANK[b.tier] || b.spend - a.spend || b.scans - a.scans || b.last - a.last);
     }
 
     function renderGraph() {
       if (!graphEl) return;
-      const key = JSON.stringify([eventsVersion, peopleVersion, isOwner, [...graphExpanded], lastExpKey, deviceId]);
+      const key = JSON.stringify([eventsVersion, peopleVersion, isOwner, [...graphExpanded], lastExpKey, deviceId, graphFilter]);
       if (key === lastGraphKey) return;
       lastGraphKey = key;
 
@@ -2665,10 +2687,36 @@
       head.append(legend);
       graphEl.append(head);
 
+      // Filters: one place and one segment at a time; both apply together.
+      const chipRow = (options, current, onPick) => {
+        const row = el('div', 'seg-row');
+        for (const [id, name, count] of options) {
+          const chip = el('button', 'chip' + (current === id ? ' on' : ''), name);
+          chip.type = 'button';
+          if (count != null) chip.append(el('b', '', String(count)));
+          chip.onclick = () => { onPick(current === id && id !== 'all' ? 'all' : id); renderGraph(); layout(); };
+          row.append(chip);
+        }
+        return row;
+      };
+      if (consumers.length) {
+        const placeCounts = new Map();
+        for (const c of consumers) for (const p of c.places.keys()) placeCounts.set(p, (placeCounts.get(p) || 0) + 1);
+        if (graphFilter.place !== 'all' && !placeCounts.has(graphFilter.place)) graphFilter.place = 'all';
+        graphEl.append(chipRow([['all', 'All places'], ...[...placeCounts].sort((a, b) => b[1] - a[1]).map(([p, n]) => [p, p, n])], graphFilter.place, (v) => { graphFilter.place = v; }));
+        const segCounts = SEGMENTS.map((seg) => [seg.id, seg.name, consumers.filter((c) => c.segments.includes(seg.id)).length]).filter(([id, , n]) => n || id === graphFilter.segment);
+        graphEl.append(chipRow([['all', 'All'], ...segCounts], graphFilter.segment, (v) => { graphFilter.segment = v; }));
+        const active = SEGMENTS.find((seg) => seg.id === graphFilter.segment);
+        if (active) { const next = el('div', 'seg-next'); next.append(el('span', '', 'Next step · '), document.createTextNode(active.next)); graphEl.append(next); }
+      }
+      const filtered = consumers.filter((c) => (graphFilter.place === 'all' || c.places.has(graphFilter.place)) && (graphFilter.segment === 'all' || c.segments.includes(graphFilter.segment)));
+      if (consumers.length && filtered.length !== consumers.length) graphEl.append(el('div', 'dash-empty', `Showing ${filtered.length} of ${consumers.length}`));
+      if (consumers.length && !filtered.length) graphEl.append(el('div', 'dash-empty', 'No one matches these filters'));
+
       if (!consumers.length) {
         graphEl.append(el('div', 'dash-empty', 'No scans yet — each scanning device appears here'));
       }
-      for (const c of consumers.slice(0, 12)) {
+      for (const c of filtered.slice(0, 12)) {
         const wrap = el('div', 'consumer');
         const row = el('button', 'consumer-row');
         row.type = 'button';
@@ -2683,7 +2731,7 @@
         if (graphExpanded.has(c.key)) wrap.append(consumerDetail(c, el));
         graphEl.append(wrap);
       }
-      if (consumers.length > 12) graphEl.append(el('div', 'dash-empty', `+ ${consumers.length - 12} more devices`));
+      if (filtered.length > 12) graphEl.append(el('div', 'dash-empty', `+ ${filtered.length - 12} more`));
       if (bounds.tree) layout();
     }
 
@@ -2704,6 +2752,7 @@
         fact('Brought in', c.referred.map((x) => x.label).join(', '), true);
         fact('Referral revenue', fmtMoney(c.referralRevenue));
       }
+      fact('Segments', SEGMENTS.filter((seg) => c.segments.includes(seg.id)).map((seg) => seg.name).join(', ') || '—', true);
       fact('First seen', timeLabel(c.first));
       fact('Last seen', timeLabel(c.last));
       fact('Places', [...c.places.keys()].join(', ') || '—');
@@ -2960,7 +3009,7 @@
     };
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, shareUrl, openShare, getPeople: () => people, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, dashboardModel, openReport, closeReport, reportData, sanitizeExperienceHtml, tapObject: (t) => imp && tapObject(t), setDemoCity, getDemoCity: () => demoCity, getHere: () => here, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything, consumersModel, graphFilter, shareUrl, openShare, getPeople: () => people, applyRole, getRole: () => ({ isOwner, uid: session.user?.uid || null, anonymous: session.user?.isAnonymous ?? null }) };
 
     buildTree();
     renderCard();
