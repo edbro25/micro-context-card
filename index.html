@@ -112,7 +112,7 @@
     /* ---------- Ledger spoke (top-left of the card) ---------- */
     .ledger { position: absolute; width: 250px; font-size: 12.5px; color: var(--muted); }
     .ledger-sum { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; margin-bottom: 5px; }
-    .ledger-sum.done { color: var(--ok); }
+    .ledger-sum.done .status { color: var(--ok); }
     .ledger-sum.over { color: #c0392b; }
     .ledger-bar { display: flex; gap: 1px; height: 3px; margin-bottom: 8px; background: var(--line); border-radius: 2px; overflow: hidden; }
     .ledger-bar i { display: block; height: 100%; }
@@ -1013,7 +1013,7 @@
       const sum = Object.assign(document.createElement('div'), { className: 'ledger-sum' + (open === 0 ? ' done' : open < 0 ? ' over' : '') });
       sum.append(
         Object.assign(document.createElement('span'), { textContent: `Stakeholders ${fmtPct(used)} of ${fmtPct(STAKEHOLDER_BPS)}` }),
-        Object.assign(document.createElement('span'), { textContent: open === 0 ? 'Fully allocated' : open > 0 ? `${fmtPct(open)} open` : `Over by ${fmtPct(-open)}` }),
+        Object.assign(document.createElement('span'), { className: 'status', textContent: open === 0 ? 'Fully allocated' : open > 0 ? `${fmtPct(open)} open` : `Over by ${fmtPct(-open)}` }),
       );
       const bar = Object.assign(document.createElement('div'), { className: 'ledger-bar' });
       list.forEach((x, i) => bar.append(Object.assign(document.createElement('i'), { style: `flex:0 0 ${x.bps / 100}%;background:${LEDGER_SHADES[i % LEDGER_SHADES.length]}` })));
