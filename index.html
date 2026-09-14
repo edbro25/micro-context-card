@@ -3055,6 +3055,8 @@
     function syncCampaignIndex() {
       if (!sync.on || !isOwner || !campaigns || !titleLoaded || leavingCampaign) return;
       const entry = campaigns[ROOM];
+      // An empty room with no entry was deleted (or never named): don't bring it back into the list.
+      if (!entry && card.title === 'Untitled' && ROOM !== 'default') return;
       const name = card.title !== 'Untitled' ? card.title.slice(0, 60) : entry?.name || campaignName(ROOM);
       if (entry?.name === name) return;
       sync.api.set(sync.api.ref(sync.db, `campaigns/${ROOM}`), { name, createdAt: entry?.createdAt || Date.now() })
