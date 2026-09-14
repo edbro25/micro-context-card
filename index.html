@@ -193,11 +193,15 @@
       display: grid; place-items: center; transition: opacity .2s, background .2s, transform .1s; }
     .rail button:active { transform: scale(.9); }
     .rail button.active { background: #fff; }
-    .off .rail button, .off .cta { opacity: .4; }
+    .off .rail button, .off .cta, .off .buy { opacity: .4; }
     .cta { position: absolute; left: 12px; right: 64px; bottom: calc(56px + env(safe-area-inset-bottom));
       background: #fff; color: var(--ink); border-radius: 12px; padding: 10px 14px; font-weight: 600; font-size: 14px;
       display: flex; justify-content: space-between; }
     .cta.active { background: var(--accent); color: #fff; }
+    .buy { position: absolute; right: 64px; bottom: calc(56px + env(safe-area-inset-bottom)); width: 116px;
+      background: var(--ok); color: #fff; border-radius: 12px; padding: 10px 8px; font-weight: 600; font-size: 14px; text-align: center; white-space: nowrap; }
+    .buy.done { background: #fff; color: var(--ok); }
+    #scanner.has-buy .cta { right: calc(64px + 124px); }
     #commentBar { position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
       display: flex; gap: 8px; background: #fff; border-radius: 999px; padding: 4px 4px 4px 14px; z-index: 2; }
     #commentBar input { flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 16px; background: transparent; }
@@ -268,6 +272,7 @@
       </div>
       <input type="file" id="htmlInput" accept=".html,.htm,text/html" hidden>
       <label class="field">Title<input id="expTitle" placeholder="e.g. In-stadium welcome" maxlength="80" autocomplete="off"></label>
+      <label class="field">Price (USD) · optional — adds a Buy button in the camera<input id="expPrice" placeholder="25.00" inputmode="decimal" autocomplete="off"></label>
       <fieldset id="locSet">
         <legend><label><input type="checkbox" id="useLoc"> Location</label></legend>
         <div class="row2">
@@ -310,6 +315,7 @@
       <button data-act="follow" aria-label="Follow">➕</button>
     </div>
     <button class="cta" data-act="tap" id="cta"><span>Learn more</span><span>›</span></button>
+    <button class="buy" id="buyBtn" type="button" hidden>Buy</button>
     <div class="scan-status" id="scanStatus"><img id="scanThumb" alt=""><span id="scanText">Starting camera…</span></div>
     <form id="commentBar" hidden>
       <input id="commentInput" placeholder="Add a comment…" autocomplete="off" enterkeyhint="send">
@@ -347,7 +353,8 @@
     const loadJSON = (key) => { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; } };
     const card = Object.assign({ title: 'Untitled', photo: null, photoId: null, target: null, seen: 0 }, loadJSON(STORE_KEY));
     const blankMetrics = () => ({ impressions: 0, views: 0, skips: 0, completed: 0, rewatches: 0, totalDwellMs: 0,
-      maxDwellMs: 0, likes: 0, comments: 0, saves: 0, shares: 0, follows: 0, taps: 0, leanIns: 0, engaged: 0, lastComment: '' });
+      maxDwellMs: 0, likes: 0, comments: 0, saves: 0, shares: 0, follows: 0, taps: 0, leanIns: 0, engaged: 0, lastComment: '',
+      purchases: 0, revenueCents: 0 });
     const metrics = Object.assign(blankMetrics(), loadJSON(METRICS_KEY));
 
     function save() {
@@ -387,6 +394,8 @@
         { id: 'follows', label: 'Follow rate', value: (m) => pct(rate(m.follows, m.impressions)), detail: (m) => ofImp(m.follows), proxy: '➕ Follow' },
         { id: 'ctr', label: 'Tap-through rate', value: (m) => pct(rate(m.taps, m.impressions)), detail: (m) => ofImp(m.taps), proxy: '“Learn more” taps' },
         { id: 'leanIn', label: 'Lean-in rate', value: (m) => pct(rate(m.leanIns, m.impressions)), detail: (m) => ofImp(m.leanIns), proxy: 'Camera moved ≥ 25% closer' },
+        { id: 'purchase', label: 'Purchase rate', value: (m) => pct(rate(m.purchases, m.impressions)), detail: (m) => ofImp(m.purchases), proxy: 'Buy taps on a priced experience' },
+        { id: 'revenue', label: 'Revenue', value: (m) => fmtMoney(m.revenueCents), proxy: 'Sum of Buy prices (demo, no charge)' },
       ] },
     ];
     const leafById = {};
@@ -1123,6 +1132,16 @@
       return form;
     }
 
+    // SPAT's 3% first, then each stakeholder's share; leftover cents (rounding or an unfinished ledger) stay unallocated.
+    function purchaseSplit(amountCents) {
+      const platformCents = Math.round(amountCents * PLATFORM_BPS / 10000);
+      const shares = Object.values(stakeholders)
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+        .map((x) => ({ name: x.name, bps: x.bps, cents: Math.floor(amountCents * x.bps / 10000) }));
+      const unallocatedCents = amountCents - platformCents - shares.reduce((n, x) => n + x.cents, 0);
+      return { platformCents, shares, unallocatedCents };
+    }
+
     function applyLedger(v) {
       stakeholders = v || {};
       saveLedgerLocal();
@@ -1136,6 +1155,7 @@
     const expanded = new Set();
     let currentExp = null, here = null, geoWatch = null, lastExpKey = '';
 
+    const fmtMoney = (cents) => `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const fmtWhen = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
     function saveExperiencesLocal() { try { localStorage.setItem(EXP_KEY, JSON.stringify(experiences)); } catch {} }
@@ -1200,6 +1220,7 @@
       const item = (k, v) => dl.append(Object.assign(document.createElement('dt'), { textContent: k }), Object.assign(document.createElement('dd'), { textContent: v }));
       item('Where', x.lat != null ? `${x.lat.toFixed(4)}, ${x.lng.toFixed(4)} · ${x.radius} m` : 'Anywhere');
       item('When', x.start || x.end ? `${x.start ? fmtWhen(x.start) : 'Now'} → ${x.end ? fmtWhen(x.end) : 'No end'}` : 'Any time');
+      if (x.priceCents) item('Price', fmtMoney(x.priceCents));
       item('Status', x.active ? 'Playing' : 'Paused');
       item('Shown', x.plays ? `${x.plays}×` : 'Not yet');
       if (x.history?.length) {
@@ -1249,14 +1270,43 @@
       const entry = { at: Date.now(), ...(here ? { lat: +here.lat.toFixed(5), lng: +here.lng.toFixed(5) } : {}) };
       upsertExperience({ ...x, plays: (x.plays || 0) + 1, lastPlayedAt: entry.at, history: [...(x.history || []), entry].slice(-5) });
       light('exp');
+      updateBuy();
     }
     function hideExperience() {
       if (!currentExp) return;
       currentExp = null;
       $('expOverlay').hidden = true;
       $('expOverlay').querySelector('iframe').srcdoc = '';
+      updateBuy();
       renderExperiences();
     }
+
+    // Buy: shown while a priced experience is on screen; one demo purchase per impression, split by the Ledger.
+    function updateBuy() {
+      const price = currentExp?.priceCents;
+      const btn = $('buyBtn');
+      btn.hidden = !price;
+      $('scanner').classList.toggle('has-buy', !!price);
+      if (!price) return;
+      const bought = !!imp?.purchased;
+      btn.textContent = bought ? 'Purchased ✓' : `Buy ${fmtMoney(price)}`;
+      btn.classList.toggle('done', bought);
+      btn.disabled = bought;
+    }
+    $('buyBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!imp) return nudge();
+      const amountCents = currentExp?.priceCents;
+      if (!amountCents || imp.purchased) return;
+      imp.purchased = true;
+      imp.actions.purchase = true;
+      metrics.purchases++;
+      metrics.revenueCents += amountCents;
+      logAction('purchase', { amountCents, split: purchaseSplit(amountCents) });
+      saveMetrics();
+      renderMetrics();
+      updateBuy();
+    });
     $('expClose').onclick = () => { hideExperience(); pushLive(true); };
 
     // Phone location while scanning (the camera itself can't tell a stadium from a living room).
@@ -1356,7 +1406,15 @@
       if (!draft) return formError('Add an HTML file first');
       const title = $('expTitle').value.trim();
       if (!title) return formError('Add a title');
+      const priceText = $('expPrice').value.trim().replace(/^\$/, '').replace(',', '.');
+      let priceCents = null;
+      if (priceText) {
+        const n = Number(priceText);
+        if (!(n >= 0.01 && n <= 10000)) return formError('Price must be between $0.01 and $10,000');
+        priceCents = Math.round(n * 100);
+      }
       const x = { id: 'x' + Date.now().toString(36) + clientId, title, html: draft.html, active: true, createdAt: Date.now(), plays: 0 };
+      if (priceCents) x.priceCents = priceCents;
       if ($('useLoc').checked) {
         const lat = parseFloat($('expLat').value), lng = parseFloat($('expLng').value), radius = parseFloat($('expRadius').value);
         if (!(lat >= -90 && lat <= 90) || !(lng >= -180 && lng <= 180)) return formError('Enter a valid latitude and longitude');
@@ -1625,7 +1683,7 @@
     }
 
     // Exposed for testing and for wiring step 2 from the console.
-    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
+    window.contextCanvas = { card, metrics, sync, getExperiences: () => experiences, getSchedule: () => schedule, getLedger: () => stakeholders, dashboardChecks, getEvents: () => events, deviceId, purchaseSplit, setHere: (h) => { here = h; }, pickExperience, openDrawer, loadMindAR, b64ToBuf, onFound, onLost, onFrame, act, endImpression, openScanner, closeScanner, fit, resetEverything };
 
     buildTree();
     renderCard();
